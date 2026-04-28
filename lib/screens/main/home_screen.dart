@@ -26,27 +26,27 @@ class _HomeScreenState extends State<HomeScreen> {
       _news = [
         {
           'id': 1,
-          'title': 'Начало нового сезона волейбола 2024',
-          'content': 'Уважаемые игроки и болельщики! Рады сообщить, что с 15 сентября начинается новый сезон волейбольных соревнований.',
+          'title': 'Начало нового сезона волейбола 2025',
+          'content': 'Уважаемые игроки и болельщики! Рады сообщить, что с 15 сентября начинается новый сезон.',
           'category': 'Новости лиги',
           'image_url': 'https://picsum.photos/id/1/400/200',
-          'created_at': '2024-09-01T10:00:00Z',
+          'created_at': '2025-09-01T10:00:00Z',
         },
         {
           'id': 2,
           'title': 'Турнир выходного дня в Москве',
-          'content': 'Приглашаем все команды на открытый турнир по волейболу, который состоится 7-8 сентября в спортивном комплексе "Олимпийский".',
+          'content': 'Приглашаем все команды на открытый турнир по волейболу 7-8 сентября.',
           'category': 'Соревнования',
           'image_url': 'https://picsum.photos/id/2/400/200',
-          'created_at': '2024-08-28T14:30:00Z',
+          'created_at': '2025-08-28T14:30:00Z',
         },
         {
           'id': 3,
-          'title': 'Мастер-класс от профессиональных игроков',
-          'content': '24 сентября состоится мастер-класс от игроков сборной России. Участие бесплатное.',
+          'title': 'Мастер-класс от профессионалов',
+          'content': '24 сентября мастер-класс от игроков сборной России. Вход свободный.',
           'category': 'Обучение',
           'image_url': 'https://picsum.photos/id/3/400/200',
-          'created_at': '2024-08-25T09:15:00Z',
+          'created_at': '2025-08-25T09:15:00Z',
         },
       ];
       _isLoading = false;
@@ -56,15 +56,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final role = Provider.of<AuthProvider>(context).userProfile?['role'] ?? 'игрок';
+
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/role'),
-        ),
         title: const Text('Новости', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(icon: const Icon(Icons.notifications), onPressed: () => context.go('/notifications')),
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () => context.go('/notifications'),
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'profile') context.go('/profile');
@@ -89,6 +89,17 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
       bottomNavigationBar: _buildBottomNavigationBar(role),
+      floatingActionButton: role == 'admin'
+          ? FloatingActionButton(
+              onPressed: () => context.go('/admin'),
+              child: const Icon(Icons.admin_panel_settings),
+            )
+          : role == 'captain'
+              ? FloatingActionButton(
+                  onPressed: () => context.go('/captain'),
+                  child: const Icon(Icons.groups),
+                )
+              : null,
     );
   }
 
@@ -113,6 +124,19 @@ class _HomeScreenState extends State<HomeScreen> {
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
         BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
         BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'admin') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'captain') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
       ];
     } else {
@@ -143,6 +167,17 @@ class _HomeScreenState extends State<HomeScreen> {
             if (index == 2) context.go('/teams-follow');
             if (index == 3) context.go('/profile');
             break;
+          case 'admin':
+            if (index == 0) context.go('/home');
+            if (index == 1) context.go('/schedule');
+            if (index == 2) context.go('/profile');
+            break;
+          case 'captain':
+            if (index == 0) context.go('/home');
+            if (index == 1) context.go('/schedule');
+            if (index == 2) context.go('/team');
+            if (index == 3) context.go('/profile');
+            break;
         }
       },
       type: BottomNavigationBarType.fixed,
@@ -159,8 +194,17 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
-            child: Image.network(news['image_url'], height: 150, width: double.infinity, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(height: 150, color: Colors.grey[200], child: const Icon(Icons.image, size: 50, color: Colors.grey))),
+            child: Image.network(
+              news['image_url'],
+              height: 150,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                height: 150,
+                color: Colors.grey[200],
+                child: const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.all(16),

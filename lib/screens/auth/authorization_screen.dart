@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,8 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  int _tapCount = 0;
+  Timer? _tapTimer;
 
   @override
   void initState() {
@@ -34,7 +37,81 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _tapTimer?.cancel();
     super.dispose();
+  }
+
+  void _onLoginButtonPressed() {
+    _tapCount++;
+    _tapTimer?.cancel();
+    _tapTimer = Timer(const Duration(milliseconds: 500), () {
+      if (_tapCount == 2) {
+        _loginAsAdmin();
+      } else if (_tapCount == 3) {
+        _loginAsCaptain();
+      } else {
+        _login();
+      }
+      _tapCount = 0;
+      _tapTimer = null;
+    });
+  }
+
+  Future<void> _loginAsAdmin() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.signInAsAdmin(_emailController.text, _passwordController.text);
+      if (mounted) context.go('/home');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Ошибка входа администратора: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loginAsCaptain() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.signInAsCaptain(_emailController.text, _passwordController.text);
+      if (mounted) context.go('/home');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Ошибка входа капитана: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.signIn(email: _emailController.text, password: _passwordController.text);
+      if (mounted) context.go('/home');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Ошибка входа: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -51,7 +128,14 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
               const SizedBox(height: 20),
               TextFormField(
                 controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email', hintText: 'example@gmail.com', prefixIcon: Icon(Icons.email), border: OutlineInputBorder(), filled: true, fillColor: Color(0xFFF8F9FA)),
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  hintText: 'admin@example.com',
+                  prefixIcon: Icon(Icons.email),
+                  border: OutlineInputBorder(),
+                  filled: true,
+                  fillColor: Color(0xFFF8F9FA),
+                ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (value) => value == null || value.isEmpty ? 'Введите email' : null,
               ),
@@ -76,13 +160,23 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : ElevatedButton(
-                      onPressed: _login,
-                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                      onPressed: _onLoginButtonPressed,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        backgroundColor: Colors.purple,
+                        foregroundColor: Colors.white,
+                      ),
                       child: const Text('Войти', style: TextStyle(fontSize: 18)),
                     ),
               const SizedBox(height: 20),
-              TextButton(onPressed: () => context.go('/registration'), child: const Text('Нет аккаунта? Зарегистрироваться')),
-              TextButton(onPressed: () => _showPasswordResetDialog(context), child: const Text('Забыли пароль?')),
+              TextButton(
+                onPressed: () => context.go('/registration'),
+                child: const Text('Нет аккаунта? Зарегистрироваться'),
+              ),
+              TextButton(
+                onPressed: () => _showPasswordResetDialog(context),
+                child: const Text('Забыли пароль?'),
+              ),
             ],
           ),
         ),
@@ -90,33 +184,22 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
     );
   }
 
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.signIn(email: _emailController.text, password: _passwordController.text);
-      if (mounted) context.go('/home');
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка входа: $e'), backgroundColor: Colors.red));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
   void _showPasswordResetDialog(BuildContext context) {
     final emailController = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Восстановление пароля'),
-        content: TextFormField(controller: emailController, decoration: const InputDecoration(labelText: 'Введите ваш email', border: OutlineInputBorder())),
+        content: TextFormField(
+          controller: emailController,
+          decoration: const InputDecoration(labelText: 'Введите ваш email', border: OutlineInputBorder()),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Инструкция отправлена на email')));
+              Navigator.pop(dialogContext);
+              ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Инструкция отправлена на email')));
             },
             child: const Text('Отправить'),
           ),

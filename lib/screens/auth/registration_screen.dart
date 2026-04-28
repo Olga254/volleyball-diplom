@@ -20,14 +20,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _phoneController = TextEditingController();
   final _teamNameController = TextEditingController();
   final _experienceController = TextEditingController();
-
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   String? _errorMessage;
   DateTime? _selectedDate;
   String? _selectedPosition;
-
   final List<String> _positions = [
     'Защитник', 'Связующий', 'Либеро', 'Диагональный', 'Доигровщик',
   ];
@@ -64,7 +62,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     } else if (!digitsOnly.startsWith('+')) {
       digitsOnly = '+$digitsOnly';
     }
-
     String formatted = '';
     if (digitsOnly.startsWith('+7')) {
       final numbers = digitsOnly.substring(2);
@@ -124,7 +121,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final role = authProvider.selectedRole ?? 'игрок';
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Регистрация'),
@@ -269,7 +265,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   initialValue: _selectedPosition,
                   decoration: InputDecoration(
                     labelText: role == 'игрок' ? 'Позиция в команде' : 'Позиция (если есть)',
-                    prefixIcon: Icon(Icons.sports_volleyball),
+                    prefixIcon: const Icon(Icons.sports_volleyball),
                     border: const OutlineInputBorder(),
                     filled: true,
                     fillColor: const Color(0xFFF8F9FA),
@@ -286,7 +282,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   textInputAction: TextInputAction.next,
                 ),
               const SizedBox(height: 16),
-              // Поле "История игр" для игрока и любителя
               if (role == 'игрок' || role == 'любитель')
                 TextFormField(
                   controller: _experienceController,

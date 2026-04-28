@@ -20,7 +20,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = authProvider.userProfile;
     final role = user?['role'] ?? 'игрок';
 
-    // Определяем отображаемое имя в зависимости от роли и мок-данных
     String displayName;
     if (user?['email'] == 'player@mock.com') {
       displayName = 'Иван Петров';
@@ -143,9 +142,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () async {
               if (controller.text.isNotEmpty) {
                 await authProvider.updateProfile({'full_name': controller.text});
-                if (mounted) {
+                // Используем dialogContext вместо внешнего context
+                if (dialogContext.mounted) {
                   Navigator.pop(dialogContext);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Имя обновлено')));
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Имя обновлено')));
                 }
               }
             },
@@ -176,9 +176,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: () async {
                 if (selected != null) {
                   await authProvider.updateProfile({'position': selected});
-                  if (mounted) {
+                  if (dialogContext.mounted) {
                     Navigator.pop(dialogContext);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Позиция обновлена')));
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Позиция обновлена')));
                   }
                 }
               },
@@ -203,9 +203,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () async {
               if (controller.text.isNotEmpty) {
                 await authProvider.updateProfile({'phone': controller.text});
-                if (mounted) {
+                if (dialogContext.mounted) {
                   Navigator.pop(dialogContext);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Телефон обновлён')));
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Телефон обновлён')));
                 }
               }
             },
@@ -219,6 +219,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _changeRole(AuthProvider authProvider, String currentRole) async {
     final newRole = currentRole == 'игрок' ? 'любитель' : 'игрок';
     await authProvider.updateRole(newRole);
+    // Используем mounted (State.context) после проверки
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Роль изменена на ${_capitalize(newRole)}')));
       context.go('/home');

@@ -11,6 +11,12 @@ import '../screens/main/profile_screen.dart';
 import '../screens/main/game_search_screen.dart';
 import '../screens/main/notifications_screen.dart';
 import '../screens/main/teams_follow_screen.dart';
+import '../screens/admin/admin_panel_screen.dart';
+import '../screens/admin/admin_users_screen.dart';
+import '../screens/admin/admin_games_screen.dart';
+import '../screens/captain/captain_panel_screen.dart';
+import '../screens/captain/captain_create_game_screen.dart';
+import '../screens/referee/referee_profile_screen.dart';
 
 class AppRouter {
   static GoRouter get router => _router;
@@ -30,6 +36,18 @@ class AppRouter {
       GoRoute(path: '/game-search', builder: (context, state) => const GameSearchScreen()),
       GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
       GoRoute(path: '/teams-follow', builder: (context, state) => const TeamsFollowScreen()),
+      // Админские маршруты
+      GoRoute(path: '/admin', builder: (context, state) => const AdminPanelScreen()),
+      GoRoute(path: '/admin/users', builder: (context, state) => const AdminUsersScreen()),
+      GoRoute(path: '/admin/games', builder: (context, state) => const AdminGamesScreen()),
+      // Капитанские маршруты
+      GoRoute(path: '/captain', builder: (context, state) => const CaptainPanelScreen()),
+      GoRoute(path: '/captain/create-game', builder: (context, state) => const CaptainCreateGameScreen()),
+      // Профиль судьи
+      GoRoute(path: '/referee/:name', builder: (context, state) {
+        final name = state.pathParameters['name']!;
+        return RefereeProfileScreen(refereeName: name);
+      }),
     ],
   );
 }

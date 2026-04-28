@@ -7,7 +7,6 @@ import '../utils/auth_storage.dart';
 
 class AuthProvider with ChangeNotifier {
   final SupabaseService _supabase = SupabaseService();
-
   User? _currentUser;
   Map<String, dynamic>? _userProfile;
   String? _selectedRole;
@@ -28,17 +27,17 @@ class AuthProvider with ChangeNotifier {
     return digest.toString();
   }
 
-  // Метод для мок-входа (тестовые пользователи)
+  // МОК-ВХОД ДЛЯ ТЕСТОВЫХ ПОЛЬЗОВАТЕЛЕЙ
   void signInAsMock(String role, String fullName, String email, String position, String experience) {
     _currentUser = User(
-      id: 'mock-${role}-id',
+      id: 'mock-$role-id',
       appMetadata: {},
       userMetadata: {},
       aud: 'authenticated',
       createdAt: DateTime.now().toIso8601String(),
     );
     _userProfile = {
-      'id': 'mock-${role}-id',
+      'id': 'mock-$role-id',
       'email': email,
       'full_name': fullName,
       'phone': '+79990000000',
@@ -52,34 +51,96 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Обновление роли (игрок <-> любитель)
-  Future<void> updateRole(String newRole) async {
-    if (_currentUser == null) return;
+  // Администратор (двойное нажатие) – через Supabase
+  Future<void> signInAsAdmin(String email, String password) async {
     try {
-      await _supabase.client
-          .from('profiles')
-          .update({'role': newRole})
-          .eq('id', _currentUser!.id);
-      _userProfile?['role'] = newRole;
-      _selectedRole = newRole;
+      final cleanedEmail = email.trim().toLowerCase();
+      final AuthResponse res = await _supabase.client.auth.signInWithPassword(
+        email: cleanedEmail,
+        password: password,
+      );
+      _currentUser = res.user;
+      await _loadUserProfile();
+      _selectedRole = _userProfile?['role'];
+      await AuthStorage.saveCredentials(email, password);
       notifyListeners();
     } catch (e) {
-      debugPrint('Ошибка обновления роли: $e');
+      throw Exception('Ошибка входа администратора: $e');
     }
   }
 
-  // Обновление профиля (имя, телефон, позиция и т.д.)
-  Future<void> updateProfile(Map<String, dynamic> data) async {
-    if (_currentUser == null) return;
+  // Капитан (тройное нажатие) – через Supabase
+  Future<void> signInAsCaptain(String email, String password) async {
     try {
-      await _supabase.client
-          .from('profiles')
-          .update(data)
-          .eq('id', _currentUser!.id);
-      _userProfile?.addAll(data);
+      final cleanedEmail = email.trim().toLowerCase();
+      final AuthResponse res = await _supabase.client.auth.signInWithPassword(
+        email: cleanedEmail,
+        password: password,
+      );
+      _currentUser = res.user;
+      await _loadUserProfile();
+      _selectedRole = _userProfile?['role'];
+      await AuthStorage.saveCredentials(email, password);
       notifyListeners();
     } catch (e) {
-      debugPrint('Ошибка обновления профиля: $e');
+      throw Exception('Ошибка входа капитана: $e');
+    }
+  }
+
+  // Загрузка профиля после входа
+  Future<void> _loadUserProfile() async {
+    if (_currentUser == null) return;
+    final profileResponse = await _supabase.client
+        .from('profiles')
+        .select()
+        .eq('id', _currentUser!.id)
+        .maybeSingle();
+    if (profileResponse == null) {
+      final userMeta = _currentUser!.userMetadata ?? {};
+      final newProfile = {
+        'id': _currentUser!.id,
+        'email': _currentUser!.email,
+        'full_name': userMeta['full_name'] ?? 'Пользователь',
+        'phone': userMeta['phone'] ?? '',
+        'role': userMeta['role'] ?? 'игрок',
+        'birth_date': userMeta['birth_date'],
+        'position': userMeta['position'],
+        'team_name': userMeta['team_name'],
+        'experience': userMeta['experience'] ?? '',
+        'password_hash': '',
+        'password_changed_at': DateTime.now().toUtc().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      };
+      await _supabase.client.from('profiles').insert(newProfile);
+      _userProfile = newProfile;
+    } else {
+      _userProfile = profileResponse;
+    }
+  }
+
+  // Обычный вход через Supabase
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final cleanedEmail = email.trim().toLowerCase();
+      final AuthResponse res = await _supabase.client.auth.signInWithPassword(
+        email: cleanedEmail,
+        password: password,
+      );
+      _currentUser = res.user;
+      await _loadUserProfile();
+      _selectedRole = _userProfile?['role'];
+      await AuthStorage.saveCredentials(email, password);
+      notifyListeners();
+    } on AuthException catch (e) {
+      debugPrint('AuthException: ${e.message}');
+      throw Exception('Неверный email или пароль');
+    } catch (e) {
+      debugPrint('Ошибка входа: $e');
+      throw Exception('Ошибка входа: $e');
     }
   }
 
@@ -93,22 +154,19 @@ class AuthProvider with ChangeNotifier {
     required DateTime birthDate,
     String? position,
     String? teamName,
-    String? experience, // добавлен параметр
+    String? experience,
   }) async {
     try {
       final cleanedEmail = email.trim().toLowerCase();
       if (cleanedEmail.isEmpty) throw Exception('Введите email');
       final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
       if (!emailRegex.hasMatch(cleanedEmail)) throw Exception('Некорректный email адрес');
-
       if (password.length < 6) throw Exception('Пароль должен содержать минимум 6 символов');
       if (fullName.trim().isEmpty) throw Exception('Введите полное имя');
-
       final cleanedPhone = _cleanPhoneNumber(phone);
       if (cleanedPhone.isEmpty) throw Exception('Введите номер телефона');
       final phoneRegex = RegExp(r'^\+[0-9]{10,15}$');
       if (!phoneRegex.hasMatch(cleanedPhone)) throw Exception('Некорректный номер телефона');
-
       final now = DateTime.now();
       if (birthDate.isAfter(now)) throw Exception('Дата рождения не может быть в будущем');
       final minAgeDate = DateTime(now.year - 14, now.month, now.day);
@@ -129,9 +187,7 @@ class AuthProvider with ChangeNotifier {
           'experience': experience ?? '',
         },
       );
-
       if (authResponse.user == null) throw Exception('Регистрация не удалась');
-
       _currentUser = authResponse.user;
 
       final profileData = {
@@ -149,7 +205,6 @@ class AuthProvider with ChangeNotifier {
         'created_at': DateTime.now().toUtc().toIso8601String(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
-
       await _supabase.client.from('profiles').insert(profileData);
       await _supabase.client.from('password_history').insert({
         'user_id': _currentUser!.id,
@@ -166,7 +221,6 @@ class AuthProvider with ChangeNotifier {
       _selectedRole = role;
       await AuthStorage.saveCredentials(email, password);
       notifyListeners();
-
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('user already registered')) {
@@ -182,55 +236,34 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Вход
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  // Обновление роли
+  Future<void> updateRole(String newRole) async {
+    if (_currentUser == null) return;
     try {
-      final cleanedEmail = email.trim().toLowerCase();
-      final AuthResponse res = await _supabase.client.auth.signInWithPassword(
-        email: cleanedEmail,
-        password: password,
-      );
-      _currentUser = res.user;
-      final profileResponse = await _supabase.client
+      await _supabase.client
           .from('profiles')
-          .select()
-          .eq('id', _currentUser!.id)
-          .maybeSingle();
-
-      if (profileResponse == null) {
-        // Если профиля нет, создаём (например, для пользователей, созданных через админку)
-        final userMeta = _currentUser!.userMetadata ?? {};
-        final newProfile = {
-          'id': _currentUser!.id,
-          'email': cleanedEmail,
-          'full_name': userMeta['full_name'] ?? 'Пользователь',
-          'phone': userMeta['phone'] ?? '',
-          'role': userMeta['role'] ?? 'игрок',
-          'birth_date': userMeta['birth_date'],
-          'position': userMeta['position'],
-          'team_name': userMeta['team_name'],
-          'experience': userMeta['experience'] ?? '',
-          'password_hash': _generatePasswordHash(password),
-          'password_changed_at': DateTime.now().toUtc().toIso8601String(),
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        };
-        await _supabase.client.from('profiles').insert(newProfile);
-        _userProfile = newProfile;
-      } else {
-        _userProfile = profileResponse;
-      }
-      _selectedRole = _userProfile?['role'];
-      await AuthStorage.saveCredentials(email, password);
+          .update({'role': newRole})
+          .eq('id', _currentUser!.id);
+      _userProfile?['role'] = newRole;
+      _selectedRole = newRole;
       notifyListeners();
-    } on AuthException {
-      throw Exception('Неверный email или пароль');
     } catch (e) {
-      debugPrint('Ошибка входа: $e');
-      throw Exception('Ошибка входа: $e');
+      debugPrint('Ошибка обновления роли: $e');
+    }
+  }
+
+  // Обновление профиля
+  Future<void> updateProfile(Map<String, dynamic> data) async {
+    if (_currentUser == null) return;
+    try {
+      await _supabase.client
+          .from('profiles')
+          .update(data)
+          .eq('id', _currentUser!.id);
+      _userProfile?.addAll(data);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Ошибка обновления профиля: $e');
     }
   }
 

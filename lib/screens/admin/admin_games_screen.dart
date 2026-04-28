@@ -1,166 +1,84 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
-import '../../providers/auth_provider.dart';
 import '../../services/game_service.dart';
 import '../../services/notification_service.dart';
 
-class ScheduleScreen extends StatefulWidget {
-  const ScheduleScreen({super.key});
+class AdminGamesScreen extends StatefulWidget {
+  const AdminGamesScreen({super.key});
 
   @override
-  State<ScheduleScreen> createState() => _ScheduleScreenState();
+  State<AdminGamesScreen> createState() => _AdminGamesScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen> {
-  List<Map<String, dynamic>> _events = [];
-  bool _isLoading = true;
+class _AdminGamesScreenState extends State<AdminGamesScreen> {
   final GameService _gameService = GameService();
   final NotificationService _notificationService = NotificationService();
-  String? _currentUserRole;
-  String? _myTeamName;
+  List<Map<String, dynamic>> _games = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadSchedule();
+    _loadGames();
   }
 
-  Future<void> _loadSchedule() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    _currentUserRole = authProvider.userProfile?['role'] ?? 'игрок';
-    _myTeamName = authProvider.userProfile?['team_name'] ?? 'Любители';
-
+  Future<void> _loadGames() async {
+    setState(() => _isLoading = true);
     await Future.delayed(const Duration(milliseconds: 500));
-    setState(() {
-      final allGames = _gameService.getAllGames();
-      final role = _currentUserRole;
-
-      if (role == 'игрок') {
-        _events = allGames.where((g) => g['homeTeam'] == _myTeamName || g['awayTeam'] == _myTeamName).toList();
-      } else if (role == 'любитель') {
-        _events = allGames.where((g) => _gameService.isJoined(g['id'])).toList();
-      } else if (role == 'болельщик') {
-        _events = allGames.where((g) => _gameService.isFollowing(g['homeTeam']) || _gameService.isFollowing(g['awayTeam'])).toList();
-      } else if (role == 'admin') {
-        _events = allGames;
-      } else if (role == 'captain') {
-        _events = allGames.where((g) => g['homeTeam'] == _myTeamName || g['awayTeam'] == _myTeamName).toList();
-      } else {
-        _events = allGames;
-      }
-      _isLoading = false;
-    });
+    _games = _gameService.getAllGamesForAdmin();
+    setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Расписание игр'),
+        title: const Text('Управление играми'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          if (_currentUserRole == 'captain')
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: () => context.go('/captain/create-game'),
-              tooltip: 'Создать игру',
-            ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadSchedule,
-              child: _events.isEmpty
-                  ? const Center(child: Text('Нет игр для отображения'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _events.length,
-                      itemBuilder: (context, index) => _buildGameCard(_events[index]),
-                    ),
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _games.length,
+              itemBuilder: (context, index) {
+                final game = _games[index];
+                final isPostponed = game['postponed'] != null && game['postponed'] != '';
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.sports_volleyball, color: Colors.blue),
+                        title: Text('${game['homeTeam']} vs ${game['awayTeam']}'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Дата: ${game['date']} ${game['time']}'),
+                            Text('Место: ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
+                            if (game['score'] != null && game['score']!.isNotEmpty)
+                              Text('Счёт: ${game['score']}'),
+                            if (isPostponed)
+                              Text('Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
+                            Text('Судья: ${game['referee']}'),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => _editGame(context, game),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
     );
   }
 
-  Widget _buildGameCard(Map<String, dynamic> game) {
-    final isPostponed = game['postponed'] != null && game['postponed'] != '';
-    final canEdit = (_currentUserRole == 'admin') || (_currentUserRole == 'captain' && (game['homeTeam'] == _myTeamName || game['awayTeam'] == _myTeamName));
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      child: InkWell(
-        onTap: () => _showGameDetails(game),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${game['homeTeam']} - ${game['awayTeam']}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  if (canEdit)
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.blue),
-                      onPressed: () => _editGame(game),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text('📅 ${game['date']} ${game['time']}'),
-              Text('📍 ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
-              Text('⚽ Счёт: ${game['score'] ?? 'не указан'}'),
-              if (isPostponed) Text('⚠️ Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
-              Text('👨‍⚖️ Судья: ${game['referee'] ?? 'не назначен'}'),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showGameDetails(Map<String, dynamic> game) {
-    final isPostponed = game['postponed'] != null && game['postponed'] != '';
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('${game['homeTeam']} vs ${game['awayTeam']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Дата: ${game['date']} ${game['time']}'),
-            Text('Место: ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
-            Text('Счёт: ${game['score'] ?? 'не указан'}'),
-            if (isPostponed) Text('Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
-            Text('Судья: ${game['referee'] ?? 'не назначен'}'),
-            const SizedBox(height: 8),
-            if (game['referee'] != null && game['referee']!.isNotEmpty)
-              TextButton(
-                onPressed: () => context.push('/referee/${Uri.encodeComponent(game['referee']!)}'),
-                child: const Text('Профиль судьи'),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть')),
-        ],
-      ),
-    );
-  }
-
-  void _editGame(Map<String, dynamic> game) async {
+  void _editGame(BuildContext context, Map<String, dynamic> game) {
     final formKey = GlobalKey<FormState>();
     final dateController = TextEditingController(text: game['date']);
     final timeController = TextEditingController(text: game['time']);
@@ -209,7 +127,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   if (postponedType == 'date')
                     TextButton(
                       onPressed: () async {
-                        final picked = await showDatePicker(context: dialogContext, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030));
+                        final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030));
                         if (picked != null) {
                           setStateDialog(() {
                             postponedDate = picked;
@@ -246,7 +164,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   await _notificationService.notifyGameChanged(updatedGame, 'изменена');
                   if (dialogContext.mounted) {
                     Navigator.pop(dialogContext);
-                    _loadSchedule();
+                    _loadGames();
                     ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Игра обновлена, уведомления отправлены')));
                   }
                 }
