@@ -43,4 +43,20 @@ class NotificationService {
     final message = 'Игра "${game['title']}" была $changeType. Проверьте обновления.';
     await sendNotificationToAll(title: title, message: message);
   }
+
+  Future<void> notifyNewGame(Map<String, dynamic> game) async {
+    final users = await _supabase.client
+        .from('profiles')
+        .select('id')
+        .eq('fan_wants_games', true);
+    for (var user in users) {
+      await _supabase.client.from('notifications').insert({
+        'user_id': user['id'],
+        'title': 'Новая игра',
+        'message': 'Создана игра: ${game['title']} на ${game['date']}',
+        'is_read': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    }
+  }
 }

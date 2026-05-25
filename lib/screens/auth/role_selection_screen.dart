@@ -3,8 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 
-class RoleScreen extends StatelessWidget {
-  const RoleScreen({super.key});
+class RoleSelectionScreen extends StatelessWidget {
+  const RoleSelectionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +13,7 @@ class RoleScreen extends StatelessWidget {
         title: const Text('Выбор роли'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/registration'),
+          onPressed: () => context.go('/authorization'),
         ),
       ),
       body: Padding(
@@ -70,10 +70,10 @@ class RoleScreen extends StatelessWidget {
       ),
       onPressed: () {
         final role = title.toLowerCase();
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        authProvider.setRole(role);
-        // Переход на экран дополнительной информации о роли
-        context.go('/role-details');
+        // Сохраняем выбранную роль в провайдере
+        Provider.of<AuthProvider>(context, listen: false).setRole(role);
+        // Переходим на экран регистрации
+        context.go('/registration');
       },
       child: Row(
         children: [

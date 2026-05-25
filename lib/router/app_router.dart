@@ -1,11 +1,11 @@
 import 'package:go_router/go_router.dart';
-import '../screens/auth/role_screen.dart';
-import '../screens/auth/registration_screen.dart';
 import '../screens/auth/authorization_screen.dart';
+import '../screens/auth/registration_screen.dart';
+import '../screens/auth/role_selection_screen.dart';
+import '../screens/auth/role_details_screen.dart';
 import '../screens/main/home_screen.dart';
 import '../screens/main/team_screen.dart';
-import '../screens/main/team_edit_screen.dart';
-import '../screens/main/add_player_screen.dart';
+import '../screens/team/add_player_screen.dart';
 import '../screens/main/schedule_screen.dart';
 import '../screens/main/profile_screen.dart';
 import '../screens/main/game_search_screen.dart';
@@ -17,19 +17,25 @@ import '../screens/admin/admin_games_screen.dart';
 import '../screens/captain/captain_panel_screen.dart';
 import '../screens/captain/captain_create_game_screen.dart';
 import '../screens/referee/referee_profile_screen.dart';
+import '../screens/fan/fan_settings_screen.dart';
+import '../screens/amateur/amateur_create_game_screen.dart';
+import '../screens/amateur/amateur_application_screen.dart';
+import '../screens/amateur/amateur_applications_list_screen.dart';
+import '../screens/notifications/invitations_screen.dart';
+import '../screens/team/team_profile_screen.dart';
 
 class AppRouter {
   static GoRouter get router => _router;
 
   static final _router = GoRouter(
-    initialLocation: '/role',
+    initialLocation: '/authorization',
     routes: [
-      GoRoute(path: '/role', builder: (context, state) => const RoleScreen()),
-      GoRoute(path: '/registration', builder: (context, state) => const RegistrationScreen()),
       GoRoute(path: '/authorization', builder: (context, state) => const AuthorizationScreen()),
+      GoRoute(path: '/role-selection', builder: (context, state) => const RoleSelectionScreen()),
+      GoRoute(path: '/registration', builder: (context, state) => const RegistrationScreen()),
+      GoRoute(path: '/role-details', builder: (context, state) => const RoleDetailsScreen()),
       GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
       GoRoute(path: '/team', builder: (context, state) => const TeamScreen()),
-      GoRoute(path: '/team/edit', builder: (context, state) => const TeamEditScreen()),
       GoRoute(path: '/team/add-player', builder: (context, state) => const AddPlayerScreen()),
       GoRoute(path: '/schedule', builder: (context, state) => const ScheduleScreen()),
       GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
@@ -47,6 +53,19 @@ class AppRouter {
       GoRoute(path: '/referee/:name', builder: (context, state) {
         final name = state.pathParameters['name']!;
         return RefereeProfileScreen(refereeName: name);
+      }),
+      // Новые маршруты
+      GoRoute(path: '/fan-settings', builder: (context, state) => const FanSettingsScreen()),
+      GoRoute(path: '/amateur/create-game', builder: (context, state) => const AmateurCreateGameScreen()),
+      GoRoute(path: '/amateur/application', builder: (context, state) => const AmateurApplicationScreen()),
+      GoRoute(path: '/amateur/applications/:gameId', builder: (context, state) {
+        final gameId = state.pathParameters['gameId']!;
+        return AmateurApplicationsListScreen(gameId: gameId);
+      }),
+      GoRoute(path: '/invitations', builder: (context, state) => const InvitationsScreen()),
+      GoRoute(path: '/team-profile/:name', builder: (context, state) {
+        final name = state.pathParameters['name']!;
+        return TeamProfileScreen(teamName: name);
       }),
     ],
   );

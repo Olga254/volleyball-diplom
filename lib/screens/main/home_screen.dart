@@ -18,6 +18,93 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadNews();
+    // Показываем диалог для болельщика после загрузки (один раз)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showFanDialogIfNeeded();
+    });
+  }
+
+  Future<void> _showFanDialogIfNeeded() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final user = auth.userProfile;
+    if (user?['role'] != 'болельщик') return;
+    // Если ответы уже есть, не показываем
+    if (user?['fan_plays_self'] != null && user?['fan_wants_games'] != null) return;
+
+    bool playsSelf = false;
+    bool wantsGames = false;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Вы играете в волейбол?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Вы сами играете в волейбол?'),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () {
+                      playsSelf = true;
+                      setStateDialog(() {});
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    child: const Text('Да'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      playsSelf = false;
+                      wantsGames = false;
+                      _saveFanSettings(playsSelf, wantsGames, dialogContext);
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    child: const Text('Нет'),
+                  ),
+                ],
+              ),
+              if (playsSelf) ...[
+                const SizedBox(height: 16),
+                const Text('Хотите искать игры для себя?'),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        wantsGames = true;
+                        _saveFanSettings(playsSelf, wantsGames, dialogContext);
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                      child: const Text('Да'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        wantsGames = false;
+                        _saveFanSettings(playsSelf, wantsGames, dialogContext);
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      child: const Text('Нет'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveFanSettings(bool playsSelf, bool wantsGames, BuildContext dialogContext) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    await auth.updateFanSettings(playsSelf, wantsGames);
+    if (dialogContext.mounted) Navigator.pop(dialogContext);
+    // Обновляем интерфейс (меню изменится)
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadNews() async {
@@ -55,7 +142,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final role = Provider.of<AuthProvider>(context).userProfile?['role'] ?? 'игрок';
+    final authProvider = Provider.of<AuthProvider>(context);
+    final role = authProvider.userProfile?['role'] ?? 'игрок';
+    final fanWantsGames = authProvider.fanWantsGames;
 
     return Scaffold(
       appBar: AppBar(
@@ -88,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemBuilder: (context, index) => _buildNewsCard(_news[index]),
               ),
             ),
-      bottomNavigationBar: _buildBottomNavigationBar(role),
+      bottomNavigationBar: _buildBottomNavigationBar(role, fanWantsGames),
       floatingActionButton: role == 'admin'
           ? FloatingActionButton(
               onPressed: () => context.go('/admin'),
@@ -103,48 +192,59 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomNavigationBar(String role) {
+  Widget _buildBottomNavigationBar(String role, bool fanWantsGames) {
     List<BottomNavigationBarItem> items;
     if (role == 'игрок') {
       items = const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
         BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
         BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
       ];
     } else if (role == 'любитель') {
       items = const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
         BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
         BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
       ];
     } else if (role == 'болельщик') {
-      items = const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
-        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
-        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
-      ];
+      if (fanWantsGames) {
+        items = [
+          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
+          const BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      } else {
+        items = const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      }
     } else if (role == 'admin') {
       items = const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
         BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
       ];
     } else if (role == 'captain') {
       items = const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
         BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
         BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
       ];
     } else {
       items = const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главное'),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
       ];
     }
+
     return BottomNavigationBar(
       currentIndex: 0,
       onTap: (index) {
@@ -162,10 +262,18 @@ class _HomeScreenState extends State<HomeScreen> {
             if (index == 3) context.go('/profile');
             break;
           case 'болельщик':
-            if (index == 0) context.go('/home');
-            if (index == 1) context.go('/schedule');
-            if (index == 2) context.go('/teams-follow');
-            if (index == 3) context.go('/profile');
+            if (fanWantsGames) {
+              if (index == 0) context.go('/home');
+              if (index == 1) context.go('/game-search');
+              if (index == 2) context.go('/schedule');
+              if (index == 3) context.go('/teams-follow');
+              if (index == 4) context.go('/profile');
+            } else {
+              if (index == 0) context.go('/home');
+              if (index == 1) context.go('/schedule');
+              if (index == 2) context.go('/teams-follow');
+              if (index == 3) context.go('/profile');
+            }
             break;
           case 'admin':
             if (index == 0) context.go('/home');
@@ -250,6 +358,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _logout() async {
     await Provider.of<AuthProvider>(context, listen: false).signOut();
-    if (mounted) context.go('/role');
+    if (mounted) context.go('/authorization');
   }
 }

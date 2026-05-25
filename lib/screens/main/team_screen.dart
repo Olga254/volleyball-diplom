@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../services/team_service.dart';
+import '../team/add_player_screen.dart';
 
 class TeamScreen extends StatefulWidget {
   const TeamScreen({super.key});
@@ -14,6 +13,9 @@ class _TeamScreenState extends State<TeamScreen> {
   List<Map<String, dynamic>> _teamMembers = [];
   bool _isLoading = true;
 
+  final TeamService _teamService = TeamService();
+  static const String _teamId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
   @override
   void initState() {
     super.initState();
@@ -21,24 +23,92 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   Future<void> _loadTeamMembers() async {
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() {
-      _teamMembers = [
-        {'full_name': 'Иванов Иван', 'birth_date': '1995-05-15', 'number': 1, 'position': 'Связующий'},
-        {'full_name': 'Петров Петр', 'birth_date': '1992-03-20', 'number': 2, 'position': 'Защитник'},
-        {'full_name': 'Сидоров Сидор', 'birth_date': '1990-01-10', 'number': 3, 'position': 'Либеро'},
-        {'full_name': 'Кузнецов Алексей', 'birth_date': '1998-07-22', 'number': 4, 'position': 'Диагональный'},
-        {'full_name': 'Морозов Дмитрий', 'birth_date': '1994-12-01', 'number': 5, 'position': 'Доигровщик'},
-      ];
-      _isLoading = false;
-    });
+    final members = await _teamService.getTeamMembers(_teamId);
+    if (mounted) {
+      setState(() {
+        _teamMembers = members;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _addPlayer() async {
+    final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPlayerScreen()));
+    if (result == true) {
+      await _loadTeamMembers();
+    }
+  }
+
+  void _removePlayer(String userId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удаление игрока'),
+        content: const Text('Вы уверены, что хотите удалить этого игрока из команды?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _teamService.removePlayerFromTeam(_teamId, userId);
+      await _loadTeamMembers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Игрок удалён')));
+      }
+    }
+  }
+
+  void _editPlayer(Map<String, dynamic> player) {
+    final nameController = TextEditingController(text: player['full_name']);
+    final phoneController = TextEditingController(text: player['phone']);
+    final positionController = TextEditingController(text: player['position']);
+    final numberController = TextEditingController(text: (player['number'] ?? '').toString());
+    final emailController = TextEditingController(text: player['email']);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Редактировать игрока'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'ФИО')),
+              TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Телефон'), keyboardType: TextInputType.phone),
+              TextField(controller: positionController, decoration: const InputDecoration(labelText: 'Позиция')),
+              TextField(controller: numberController, decoration: const InputDecoration(labelText: 'Номер'), keyboardType: TextInputType.number),
+              TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email'), enabled: false),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () async {
+              await _teamService.updatePlayerInTeam(
+                userId: player['user_id'],
+                fullName: nameController.text,
+                phone: phoneController.text,
+                position: positionController.text,
+                number: int.tryParse(numberController.text) ?? 0,
+              );
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              await _loadTeamMembers();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Данные игрока обновлены')));
+              }
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context).userProfile;
-    final isCaptain = user?['role'] == 'капитан';
-
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -47,11 +117,11 @@ class _TeamScreenState extends State<TeamScreen> {
         ),
         title: const Text('Команда'),
         actions: [
-          if (isCaptain)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => context.push('/team/edit'),
-            ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _addPlayer,
+            tooltip: 'Добавить игрока',
+          ),
         ],
       ),
       body: _isLoading
@@ -66,14 +136,28 @@ class _TeamScreenState extends State<TeamScreen> {
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.blue[100],
-                      child: Text(player['number'].toString(), style: const TextStyle(color: Colors.blue)),
+                      child: Text(player['number']?.toString() ?? '?', style: const TextStyle(color: Colors.blue)),
                     ),
-                    title: Text(player['full_name']),
+                    title: Text('${player['full_name'] ?? ''}'),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Позиция: ${player['position']}'),
-                        Text('Дата рождения: ${player['birth_date']}'),
+                        Text('Позиция: ${player['position'] ?? 'не указана'}'),
+                        Text('Дата рождения: ${player['birth_date'] ?? '—'}'),
+                        Text('Телефон: ${player['phone'] ?? '—'}'),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue),
+                          onPressed: () => _editPlayer(player),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _removePlayer(player['user_id']),
+                        ),
                       ],
                     ),
                   ),

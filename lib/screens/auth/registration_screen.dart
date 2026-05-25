@@ -121,12 +121,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final role = authProvider.selectedRole ?? 'игрок';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Регистрация'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/role'),
+          onPressed: () => context.go('/role-selection'),
         ),
       ),
       body: SingleChildScrollView(
@@ -151,7 +152,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     Text(_getRoleDisplayName(role), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
                     const Spacer(),
                     TextButton(
-                      onPressed: () => context.go('/role'),
+                      onPressed: () => context.go('/role-selection'),
                       child: Text('Изменить', style: TextStyle(color: Theme.of(context).primaryColor)),
                     ),
                   ],
@@ -319,7 +320,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               const SizedBox(height: 20),
               Center(
                 child: TextButton(
-                  onPressed: () => context.go('/authorization'),
+                  onPressed: () => context.go('/role-selection'),
                   child: RichText(
                     text: TextSpan(
                       style: TextStyle(color: Colors.grey.shade700),
@@ -329,13 +330,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ],
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Center(
-                child: TextButton(
-                  onPressed: () => context.go('/role'),
-                  child: Text('Вернуться к выбору роли', style: TextStyle(color: Colors.grey.shade600)),
                 ),
               ),
             ],

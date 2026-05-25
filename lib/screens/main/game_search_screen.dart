@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/game_service.dart';
+import '../amateur/amateur_create_game_screen.dart';
+import '../amateur/amateur_application_screen.dart';
 
 class GameSearchScreen extends StatefulWidget {
   const GameSearchScreen({super.key});
@@ -9,17 +13,15 @@ class GameSearchScreen extends StatefulWidget {
 }
 
 class _GameSearchScreenState extends State<GameSearchScreen> {
-  List<Map<String, dynamic>> _allGames = [];
-  List<Map<String, dynamic>> _filteredGames = [];
+  List<Map<String, dynamic>> _games = [];
   bool _isLoading = true;
   final GameService _gameService = GameService();
 
   // Фильтры
-  bool _filterBeach = false;
-  bool _filterHome = false;
-  bool _filterBoys = false;
-  bool _filterGirls = false;
-  String? _filterAge; // 'U18', 'U21', 'Open'
+  String? _filterSurface; // 'зал', 'пляж'
+  String? _filterGender;  // 'женская', 'мужская', 'смешанная'
+  String? _filterAge;     // 'U18', 'U21', 'Open'
+  String? _filterLevel;   // 'Любитель', 'Продвинутый', 'PRO'
 
   @override
   void initState() {
@@ -28,95 +30,51 @@ class _GameSearchScreenState extends State<GameSearchScreen> {
   }
 
   Future<void> _loadGames() async {
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() {
-      _allGames = [
-        {
-          'id': 1,
-          'title': 'Вечерний волейбол',
-          'date': '2025-04-10',
-          'time': '18:00',
-          'location': 'Спортзал "Центральный", Ленина 10',
-          'players_needed': 4,
-          'captain': 'Иван Петров',
-          'surface': 'зал',
-          'gender': 'смешанный',
-          'age': 'Open',
-          'joined': _gameService.isJoined(1),
-        },
-        {
-          'id': 2,
-          'title': 'Турнир выходного дня',
-          'date': '2025-04-11',
-          'time': '11:00',
-          'location': 'Парк Победы, Пляжная зона',
-          'players_needed': 6,
-          'captain': 'Алексей Сидоров',
-          'surface': 'пляж',
-          'gender': 'мальчики',
-          'age': 'U18',
-          'joined': _gameService.isJoined(2),
-        },
-        {
-          'id': 3,
-          'title': 'Игра на пляже',
-          'date': '2025-04-13',
-          'time': '16:00',
-          'location': 'Пляж "Ласковый", Солнечная 5',
-          'players_needed': 2,
-          'captain': 'Мария Иванова',
-          'surface': 'пляж',
-          'gender': 'девочки',
-          'age': 'U21',
-          'joined': _gameService.isJoined(3),
-        },
-        {
-          'id': 4,
-          'title': 'Домашний турнир',
-          'date': '2025-04-15',
-          'time': '14:00',
-          'location': 'Спорткомплекс "Дружба", Мира 1',
-          'players_needed': 8,
-          'captain': 'Дмитрий Козлов',
-          'surface': 'зал',
-          'gender': 'смешанный',
-          'age': 'Open',
-          'joined': _gameService.isJoined(4),
-        },
-        {
-          'id': 5,
-          'title': 'Пляжный кубок',
-          'date': '2025-04-17',
-          'time': '10:00',
-          'location': 'Пляж "Солнечный", Пляжная 2',
-          'players_needed': 4,
-          'captain': 'Елена Смирнова',
-          'surface': 'пляж',
-          'gender': 'девочки',
-          'age': 'U18',
-          'joined': _gameService.isJoined(5),
-        },
-      ];
-      _applyFilters();
-      _isLoading = false;
-    });
+    setState(() => _isLoading = true);
+    final allGames = _gameService.getAllGamesForAdmin();
+    _games = allGames.where((g) => 
+      g['created_by_type'] == 'amateur' || g['type'] == 'friendly'
+    ).toList();
+    setState(() => _isLoading = false);
   }
 
-  void _applyFilters() {
-    _filteredGames = _allGames.where((game) {
-      if (_filterBeach && game['surface'] != 'пляж') return false;
-      if (_filterHome && game['surface'] != 'зал') return false;
-      if (_filterBoys && game['gender'] != 'мальчики') return false;
-      if (_filterGirls && game['gender'] != 'девочки') return false;
-      if (_filterAge != null && game['age'] != _filterAge) return false;
+  List<Map<String, dynamic>> get _filteredGames {
+    return _games.where((game) {
+      if (_filterSurface != null && game['surface'] != _filterSurface) return false;
+      if (_filterGender != null && game['target_gender'] != _filterGender) return false;
+      if (_filterAge != null && game['target_age'] != _filterAge) return false;
+      if (_filterLevel != null && game['level'] != _filterLevel) return false;
       return true;
     }).toList();
-    setState(() {});
+  }
+
+  Future<void> _showParticipantsList(Map<String, dynamic> game) async {
+    final participants = await _gameService.getGameParticipants(game['id']);
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Участники игры "${game['title']}"', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            if (participants.isEmpty)
+              const Text('Пока никто не записался')
+            else
+              ...participants.map((p) => ListTile(title: Text(p['full_name']), leading: const Icon(Icons.person))),
+          ],
+        ),
+      ),
+    );
   }
 
   void _toggleJoin(Map<String, dynamic> game) {
+    final isJoined = game['joined'] ?? false;
     setState(() {
-      if (game['joined']) {
+      if (isJoined) {
         _gameService.leaveGame(game['id']);
         game['joined'] = false;
       } else {
@@ -131,128 +89,138 @@ class _GameSearchScreenState extends State<GameSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = Provider.of<AuthProvider>(context);
+    final role = auth.userProfile?['role'];
+    final canCreateGame = role == 'любитель' || role == 'admin' || role == 'captain';
+    final canCreateApplication = role == 'любитель';
+
     return Scaffold(
       appBar: AppBar(
+        title: const Text('Поиск игр'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('Поиск игр'),
+        actions: [
+          if (canCreateGame)
+            IconButton(
+              icon: const Icon(Icons.add_circle),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AmateurCreateGameScreen())),
+              tooltip: 'Создать игру',
+            ),
+          if (canCreateApplication)
+            IconButton(
+              icon: const Icon(Icons.assignment),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AmateurApplicationScreen())),
+              tooltip: 'Моя анкета',
+            ),
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      body: Column(
+        children: [
+          // Удалена строка поиска
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
               children: [
-                // Фильтры
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
-                    children: [
-                      FilterChip(
-                        label: const Text('Пляж'),
-                        selected: _filterBeach,
-                        onSelected: (selected) {
-                          setState(() {
-                            _filterBeach = selected;
-                            if (selected) _filterHome = false;
-                            _applyFilters();
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Зал'),
-                        selected: _filterHome,
-                        onSelected: (selected) {
-                          setState(() {
-                            _filterHome = selected;
-                            if (selected) _filterBeach = false;
-                            _applyFilters();
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Мальчики'),
-                        selected: _filterBoys,
-                        onSelected: (selected) {
-                          setState(() {
-                            _filterBoys = selected;
-                            if (selected) _filterGirls = false;
-                            _applyFilters();
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Девочки'),
-                        selected: _filterGirls,
-                        onSelected: (selected) {
-                          setState(() {
-                            _filterGirls = selected;
-                            if (selected) _filterBoys = false;
-                            _applyFilters();
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        hint: const Text('Возраст'),
-                        value: _filterAge,
-                        items: const [
-                          DropdownMenuItem(value: null, child: Text('Все')),
-                          DropdownMenuItem(value: 'U18', child: Text('U18')),
-                          DropdownMenuItem(value: 'U21', child: Text('U21')),
-                          DropdownMenuItem(value: 'Open', child: Text('Open')),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _filterAge = value;
-                            _applyFilters();
-                          });
-                        },
-                      ),
-                    ],
-                  ),
+                FilterChip(label: const Text('Зал'), selected: _filterSurface == 'зал', onSelected: (s) => setState(() => _filterSurface = s ? 'зал' : null)),
+                const SizedBox(width: 8),
+                FilterChip(label: const Text('Пляж'), selected: _filterSurface == 'пляж', onSelected: (s) => setState(() => _filterSurface = s ? 'пляж' : null)),
+                const SizedBox(width: 8),
+                FilterChip(label: const Text('Женская'), selected: _filterGender == 'женская', onSelected: (s) => setState(() => _filterGender = s ? 'женская' : null)),
+                const SizedBox(width: 8),
+                FilterChip(label: const Text('Мужская'), selected: _filterGender == 'мужская', onSelected: (s) => setState(() => _filterGender = s ? 'мужская' : null)),
+                const SizedBox(width: 8),
+                FilterChip(label: const Text('Смешанная'), selected: _filterGender == 'смешанная', onSelected: (s) => setState(() => _filterGender = s ? 'смешанная' : null)),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  hint: const Text('Возраст'),
+                  value: _filterAge,
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Все')),
+                    DropdownMenuItem(value: 'U18', child: Text('U18')),
+                    DropdownMenuItem(value: 'U21', child: Text('U21')),
+                    DropdownMenuItem(value: 'Open', child: Text('Open')),
+                  ],
+                  onChanged: (v) => setState(() => _filterAge = v),
                 ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _filteredGames.length,
-                    itemBuilder: (context, index) {
-                      final game = _filteredGames[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          title: Text(game['title']),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Дата: ${game['date']} ${game['time']}'),
-                              Text('Место: ${game['location']}'),
-                              Text('Капитан: ${game['captain']}'),
-                              Text('Нужно игроков: ${game['players_needed']}'),
-                              Text('Покрытие: ${game['surface']}, Пол: ${game['gender']}, Возраст: ${game['age']}'),
-                            ],
-                          ),
-                          trailing: game['joined']
-                              ? OutlinedButton(
-                                  onPressed: () => _toggleJoin(game),
-                                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                                  child: const Text('Отказаться'),
-                                )
-                              : ElevatedButton(
-                                  onPressed: () => _toggleJoin(game),
-                                  child: const Text('Записаться'),
-                                ),
-                        ),
-                      );
-                    },
-                  ),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  hint: const Text('Уровень'),
+                  value: _filterLevel,
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Все')),
+                    DropdownMenuItem(value: 'Любитель', child: Text('Любитель')),
+                    DropdownMenuItem(value: 'Продвинутый', child: Text('Продвинутый')),
+                    DropdownMenuItem(value: 'PRO', child: Text('PRO')),
+                  ],
+                  onChanged: (v) => setState(() => _filterLevel = v),
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredGames.isEmpty
+                    ? const Center(child: Text('Нет доступных игр'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(8),
+                        itemCount: _filteredGames.length,
+                        itemBuilder: (context, index) {
+                          final game = _filteredGames[index];
+                          final isPostponed = game['postponed'] != null && game['postponed'] != '';
+                          final isJoined = game['joined'] ?? false;
+                          final hasReferee = game['referee'] != null && game['referee']!.isNotEmpty;
+                          final cost = game['cost'] ?? 'Бесплатно';
+                          final level = game['level'] ?? 'Не указан';
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  title: Text(game['title'] ?? 'Любительская игра'),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Дата: ${game['date']} ${game['time']}'),
+                                      Text('Место: ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
+                                      if (game['address'] != null) Text('Адрес: ${game['address']}'),
+                                      Text('Стоимость: $cost'),
+                                      if (game['target_gender'] != null) Text('Пол: ${game['target_gender']}'),
+                                      if (game['target_age'] != null) Text('Возраст: ${game['target_age']}'),
+                                      Text('Уровень: $level'),
+                                      Text('Судья: ${hasReferee ? game['referee'] : 'нет'}'),
+                                      Text('Организатор: ${game['created_by_name'] ?? 'Неизвестен'}'),
+                                    ],
+                                  ),
+                                  trailing: isJoined
+                                      ? OutlinedButton(onPressed: () => _toggleJoin(game), style: OutlinedButton.styleFrom(foregroundColor: Colors.red), child: const Text('Отказаться'))
+                                      : ElevatedButton(onPressed: () => _toggleJoin(game), child: const Text('Записаться')),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () => _showParticipantsList(game),
+                                        icon: const Icon(Icons.people),
+                                        label: const Text('Кто идёт?'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }

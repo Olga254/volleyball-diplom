@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../fan/fan_settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,6 +14,18 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _showSettings = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Показываем диалог для болельщика после входа
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      if (auth.userProfile?['role'] == 'болельщик') {
+        FanSettingsScreen.showFirstTimeDialog(context);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,86 +58,104 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              color: Theme.of(context).primaryColor.withAlpha(25),
-              child: Column(
-                children: [
-                  const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
-                  const SizedBox(height: 16),
-                  Text(displayName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text(user?['email'] ?? '', style: TextStyle(color: Colors.grey.shade600)),
-                  const SizedBox(height: 8),
-                  Chip(label: Text(_capitalize(role)), backgroundColor: Theme.of(context).primaryColor, labelStyle: const TextStyle(color: Colors.white)),
-                ],
-              ),
+      body: _showSettings
+          ? _buildSettingsView(authProvider, role, user)
+          : _buildProfileView(displayName, user, role),
+    );
+  }
+
+  Widget _buildProfileView(String displayName, Map<String, dynamic>? user, String role) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            color: Theme.of(context).primaryColor.withAlpha(25),
+            child: Column(
+              children: [
+                const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
+                const SizedBox(height: 16),
+                Text(displayName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Text(user?['email'] ?? '', style: TextStyle(color: Colors.grey.shade600)),
+                const SizedBox(height: 8),
+                Chip(label: Text(_capitalize(role)), backgroundColor: Theme.of(context).primaryColor, labelStyle: const TextStyle(color: Colors.white)),
+              ],
             ),
-            if (!_showSettings) ...[
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(children: [Icon(Icons.notifications_active), SizedBox(width: 16), Text('Уведомления', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
-              ),
-              ListTile(
-                leading: const Icon(Icons.notifications),
-                title: const Text('Посмотреть все уведомления'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () => context.go('/notifications'),
-              ),
-            ],
-            if (_showSettings) ...[
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(children: [Icon(Icons.settings), SizedBox(width: 16), Text('Настройки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
-              ),
-              ListTile(
-                leading: const Icon(Icons.brightness_6),
-                title: const Text('Тема приложения'),
-                trailing: Switch(
-                  value: Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark,
-                  onChanged: (_) => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-                ),
-                onTap: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-              ),
-              ListTile(
-                leading: const Icon(Icons.person),
-                title: const Text('Изменить имя'),
-                trailing: const Icon(Icons.edit),
-                onTap: () => _showEditNameDialog(context, authProvider),
-              ),
-              if (role == 'игрок' || role == 'любитель')
-                ListTile(
-                  leading: const Icon(Icons.switch_account),
-                  title: const Text('Сменить роль'),
-                  subtitle: Text(role == 'игрок' ? 'Стать любителем' : 'Стать игроком'),
-                  trailing: const Icon(Icons.arrow_forward_ios),
-                  onTap: () => _changeRole(authProvider, role),
-                ),
-              if (role == 'игрок')
-                ListTile(
-                  leading: const Icon(Icons.sports_volleyball),
-                  title: const Text('Изменить позицию'),
-                  trailing: const Icon(Icons.edit),
-                  onTap: () => _showEditPositionDialog(context, authProvider, user?['position'] ?? ''),
-                ),
-              ListTile(
-                leading: const Icon(Icons.phone),
-                title: const Text('Изменить телефон'),
-                trailing: const Icon(Icons.edit),
-                onTap: () => _showEditPhoneDialog(context, authProvider, user?['phone'] ?? ''),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text('Выйти', style: TextStyle(color: Colors.red)),
-                onTap: _logout,
-              ),
-            ],
-            const SizedBox(height: 20),
-          ],
-        ),
+          ),
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(children: [Icon(Icons.notifications_active), SizedBox(width: 16), Text('Уведомления', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications),
+            title: const Text('Посмотреть все уведомления'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => context.go('/notifications'),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsView(AuthProvider authProvider, String role, Map<String, dynamic>? user) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(children: [Icon(Icons.settings), SizedBox(width: 16), Text('Настройки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
+          ),
+          ListTile(
+            leading: const Icon(Icons.brightness_6),
+            title: const Text('Тема приложения'),
+            trailing: Switch(
+              value: Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark,
+              onChanged: (_) => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+            ),
+            onTap: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: const Text('Изменить имя'),
+            trailing: const Icon(Icons.edit),
+            onTap: () => _showEditNameDialog(context, authProvider),
+          ),
+          if (role == 'игрок' || role == 'любитель')
+            ListTile(
+              leading: const Icon(Icons.switch_account),
+              title: const Text('Сменить роль'),
+              subtitle: Text(role == 'игрок' ? 'Стать любителем' : 'Стать игроком'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () => _changeRole(authProvider, role),
+            ),
+          if (role == 'игрок')
+            ListTile(
+              leading: const Icon(Icons.sports_volleyball),
+              title: const Text('Изменить позицию'),
+              trailing: const Icon(Icons.edit),
+              onTap: () => _showEditPositionDialog(context, authProvider, user?['position'] ?? ''),
+            ),
+          ListTile(
+            leading: const Icon(Icons.phone),
+            title: const Text('Изменить телефон'),
+            trailing: const Icon(Icons.edit),
+            onTap: () => _showEditPhoneDialog(context, authProvider, user?['phone'] ?? ''),
+          ),
+          if (role == 'болельщик')
+            ListTile(
+              leading: const Icon(Icons.sports_volleyball),
+              title: const Text('Игры для себя'),
+              onTap: () => context.go('/fan-settings'),
+            ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Выйти', style: TextStyle(color: Colors.red)),
+            onTap: _logout,
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
@@ -142,7 +173,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () async {
               if (controller.text.isNotEmpty) {
                 await authProvider.updateProfile({'full_name': controller.text});
-                // Используем dialogContext вместо внешнего context
                 if (dialogContext.mounted) {
                   Navigator.pop(dialogContext);
                   ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Имя обновлено')));
@@ -219,7 +249,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _changeRole(AuthProvider authProvider, String currentRole) async {
     final newRole = currentRole == 'игрок' ? 'любитель' : 'игрок';
     await authProvider.updateRole(newRole);
-    // Используем mounted (State.context) после проверки
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Роль изменена на ${_capitalize(newRole)}')));
       context.go('/home');
@@ -228,7 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await Provider.of<AuthProvider>(context, listen: false).signOut();
-    if (mounted) context.go('/role');
+    if (mounted) context.go('/authorization');
   }
 
   String _capitalize(String text) => text.isNotEmpty ? '${text[0].toUpperCase()}${text.substring(1)}' : text;

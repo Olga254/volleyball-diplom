@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/supabase_service.dart';
 import '../../utils/auth_storage.dart';
 
 class AuthorizationScreen extends StatefulWidget {
@@ -18,8 +18,8 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  int _tapCount = 0;
-  Timer? _tapTimer;
+
+  final SupabaseService _supabase = SupabaseService();
 
   @override
   void initState() {
@@ -29,89 +29,98 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
 
   Future<void> _loadSavedCredentials() async {
     final creds = await AuthStorage.getCredentials();
-    if (creds['email'] != null && mounted) _emailController.text = creds['email']!;
-    if (creds['password'] != null && mounted) _passwordController.text = creds['password']!;
+    if (creds['email'] != null && mounted) {
+      _emailController.text = creds['email']!;
+    }
+    if (creds['password'] != null && mounted) {
+      _passwordController.text = creds['password']!;
+    }
   }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _tapTimer?.cancel();
     super.dispose();
-  }
-
-  void _onLoginButtonPressed() {
-    _tapCount++;
-    _tapTimer?.cancel();
-    _tapTimer = Timer(const Duration(milliseconds: 500), () {
-      if (_tapCount == 2) {
-        _loginAsAdmin();
-      } else if (_tapCount == 3) {
-        _loginAsCaptain();
-      } else {
-        _login();
-      }
-      _tapCount = 0;
-      _tapTimer = null;
-    });
-  }
-
-  Future<void> _loginAsAdmin() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.signInAsAdmin(_emailController.text, _passwordController.text);
-      if (mounted) context.go('/home');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Ошибка входа администратора: $e'),
-          backgroundColor: Colors.red,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _loginAsCaptain() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.signInAsCaptain(_emailController.text, _passwordController.text);
-      if (mounted) context.go('/home');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Ошибка входа капитана: $e'),
-          backgroundColor: Colors.red,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
   }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+    final email = _emailController.text.trim().toLowerCase();
+
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.signIn(email: _emailController.text, password: _passwordController.text);
-      if (mounted) context.go('/home');
+      final profile = await _supabase.client
+          .from('profiles')
+          .select()
+          .ilike('email', email)
+          .maybeSingle();
+
+      if (profile != null) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        authProvider.signInAsMock(
+          profile['role'],
+          profile['full_name'],
+          profile['email'],
+          profile['position'] ?? '',
+          profile['experience'] ?? '',
+        );
+        await AuthStorage.saveCredentials(profile['email'], _passwordController.text);
+        if (mounted) {
+          context.go('/home');
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Пользователь с таким email не найден. Зарегистрируйтесь.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Ошибка входа: $e'),
-          backgroundColor: Colors.red,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showPasswordResetDialog(BuildContext context) {
+    final emailController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Восстановление пароля'),
+        content: TextFormField(
+          controller: emailController,
+          decoration: const InputDecoration(labelText: 'Введите ваш email', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+            },
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              if (dialogContext.mounted) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('Инструкция отправлена на email')),
+                );
+              }
+            },
+            child: const Text('Отправить'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -130,7 +139,7 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
                 controller: _emailController,
                 decoration: const InputDecoration(
                   labelText: 'Email',
-                  hintText: 'admin@example.com',
+                  hintText: 'example@gmail.com',
                   prefixIcon: Icon(Icons.email),
                   border: OutlineInputBorder(),
                   filled: true,
@@ -160,7 +169,7 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : ElevatedButton(
-                      onPressed: _onLoginButtonPressed,
+                      onPressed: _login,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 15),
                         backgroundColor: Colors.purple,
@@ -170,7 +179,7 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
                     ),
               const SizedBox(height: 20),
               TextButton(
-                onPressed: () => context.go('/registration'),
+                onPressed: () => context.go('/role-selection'),
                 child: const Text('Нет аккаунта? Зарегистрироваться'),
               ),
               TextButton(
@@ -180,30 +189,6 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showPasswordResetDialog(BuildContext context) {
-    final emailController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Восстановление пароля'),
-        content: TextFormField(
-          controller: emailController,
-          decoration: const InputDecoration(labelText: 'Введите ваш email', border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Инструкция отправлена на email')));
-            },
-            child: const Text('Отправить'),
-          ),
-        ],
       ),
     );
   }

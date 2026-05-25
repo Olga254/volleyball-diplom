@@ -11,6 +11,9 @@ class AuthProvider with ChangeNotifier {
   Map<String, dynamic>? _userProfile;
   String? _selectedRole;
 
+  // ID фиксированной команды (должна существовать в БД)
+  static const String _teamId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
   User? get currentUser => _currentUser;
   Map<String, dynamic>? get userProfile => _userProfile;
   String? get selectedRole => _selectedRole;
@@ -51,7 +54,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Администратор (двойное нажатие) – через Supabase
+  // Администратор (двойное нажатие)
   Future<void> signInAsAdmin(String email, String password) async {
     try {
       final cleanedEmail = email.trim().toLowerCase();
@@ -69,7 +72,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Капитан (тройное нажатие) – через Supabase
+  // Капитан (тройное нажатие)
   Future<void> signInAsCaptain(String email, String password) async {
     try {
       final cleanedEmail = email.trim().toLowerCase();
@@ -144,7 +147,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Регистрация
+  // Регистрация (с добавлением в команду для игроков)
   Future<void> signUp({
     required String email,
     required String password,
@@ -219,6 +222,20 @@ class AuthProvider with ChangeNotifier {
           .single();
       _userProfile = createdProfile;
       _selectedRole = role;
+
+      // Добавляем игрока в команду (только если роль 'игрок')
+      if (role == 'игрок') {
+        try {
+          await _supabase.client.from('team_members').insert({
+            'team_id': _teamId,
+            'user_id': _currentUser!.id,
+            'role_in_team': 'игрок',
+          });
+        } catch (e) {
+          debugPrint('Ошибка добавления в команду: $e');
+        }
+      }
+
       await AuthStorage.saveCredentials(email, password);
       notifyListeners();
     } on AuthException catch (e) {
@@ -276,6 +293,28 @@ class AuthProvider with ChangeNotifier {
     await AuthStorage.clearCredentials();
     notifyListeners();
   }
+
+  // Настройки болельщика
+  Future<void> updateFanSettings(bool playsSelf, bool wantsGames) async {
+    if (_currentUser == null) return;
+    try {
+      await _supabase.client
+          .from('profiles')
+          .update({
+            'fan_plays_self': playsSelf,
+            'fan_wants_games': wantsGames,
+          })
+          .eq('id', _currentUser!.id);
+      _userProfile?['fan_plays_self'] = playsSelf;
+      _userProfile?['fan_wants_games'] = wantsGames;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Ошибка обновления настроек болельщика: $e');
+    }
+  }
+
+  bool get isFanPlayer => _userProfile?['fan_plays_self'] == true;
+  bool get fanWantsGames => _userProfile?['fan_wants_games'] == true;
 
   // Вспомогательная очистка номера телефона
   String _cleanPhoneNumber(String phone) {

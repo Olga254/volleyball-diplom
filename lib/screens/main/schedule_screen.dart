@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/game_service.dart';
-import '../../services/notification_service.dart';
+import '../team/team_profile_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -13,12 +12,11 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
-  List<Map<String, dynamic>> _events = [];
+  List<Map<String, dynamic>> _myGames = [];
+  List<Map<String, dynamic>> _teamGames = [];
   bool _isLoading = true;
   final GameService _gameService = GameService();
-  final NotificationService _notificationService = NotificationService();
   String? _currentUserRole;
-  String? _myTeamName;
 
   @override
   void initState() {
@@ -29,7 +27,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _loadSchedule() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     _currentUserRole = authProvider.userProfile?['role'] ?? 'игрок';
-    _myTeamName = authProvider.userProfile?['team_name'] ?? 'Любители';
 
     await Future.delayed(const Duration(milliseconds: 500));
     setState(() {
@@ -37,17 +34,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final role = _currentUserRole;
 
       if (role == 'игрок') {
-        _events = allGames.where((g) => g['homeTeam'] == _myTeamName || g['awayTeam'] == _myTeamName).toList();
+        _teamGames = allGames;
+        _myGames = [];
       } else if (role == 'любитель') {
-        _events = allGames.where((g) => _gameService.isJoined(g['id'])).toList();
+        _myGames = allGames.where((g) => _gameService.isJoined(g['id'])).toList();
+        _teamGames = [];
       } else if (role == 'болельщик') {
-        _events = allGames.where((g) => _gameService.isFollowing(g['homeTeam']) || _gameService.isFollowing(g['awayTeam'])).toList();
-      } else if (role == 'admin') {
-        _events = allGames;
-      } else if (role == 'captain') {
-        _events = allGames.where((g) => g['homeTeam'] == _myTeamName || g['awayTeam'] == _myTeamName).toList();
+        _myGames = allGames.where((g) => _gameService.isJoined(g['id'])).toList();
+        _teamGames = allGames.where((g) => _gameService.isFollowing(g['homeTeam']) || _gameService.isFollowing(g['awayTeam'])).toList();
       } else {
-        _events = allGames;
+        _teamGames = allGames;
+        _myGames = [];
       }
       _isLoading = false;
     });
@@ -55,32 +52,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isPlayer = _currentUserRole == 'игрок';
+    final displayGames = isPlayer ? _teamGames : (_myGames.isNotEmpty ? _myGames : _teamGames);
+    final title = isPlayer ? 'Расписание команды' : 'Расписание';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Расписание игр'),
+        title: Text(title),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        actions: [
-          if (_currentUserRole == 'captain')
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: () => context.go('/captain/create-game'),
-              tooltip: 'Создать игру',
-            ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadSchedule,
-              child: _events.isEmpty
+              child: displayGames.isEmpty
                   ? const Center(child: Text('Нет игр для отображения'))
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _events.length,
-                      itemBuilder: (context, index) => _buildGameCard(_events[index]),
+                      itemCount: displayGames.length,
+                      itemBuilder: (context, index) => _buildGameCard(displayGames[index]),
                     ),
             ),
     );
@@ -88,50 +81,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Widget _buildGameCard(Map<String, dynamic> game) {
     final isPostponed = game['postponed'] != null && game['postponed'] != '';
-    final canEdit = (_currentUserRole == 'admin') || (_currentUserRole == 'captain' && (game['homeTeam'] == _myTeamName || game['awayTeam'] == _myTeamName));
-
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      child: InkWell(
-        onTap: () => _showGameDetails(game),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${game['homeTeam']} - ${game['awayTeam']}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  if (canEdit)
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.blue),
-                      onPressed: () => _editGame(game),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text('📅 ${game['date']} ${game['time']}'),
-              Text('📍 ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
-              Text('⚽ Счёт: ${game['score'] ?? 'не указан'}'),
-              if (isPostponed) Text('⚠️ Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
-              Text('👨‍⚖️ Судья: ${game['referee'] ?? 'не назначен'}'),
-            ],
-          ),
+      child: ListTile(
+        title: Text('${game['homeTeam'] ?? '?'} - ${game['awayTeam'] ?? '?'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('📅 ${game['date']} ${game['time']}'),
+            Text('📍 ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
+            if (game['address'] != null) Text('🏠 ${game['address']}'),
+            Text('👨‍⚖️ Судья: ${game['referee'] ?? 'не назначен'}'),
+            if (isPostponed) Text('⚠️ Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
+          ],
         ),
+        trailing: game['score'] != null ? Chip(label: Text(game['score']), backgroundColor: Colors.green[100]) : null,
+        onTap: () => _showGameDetails(game),
       ),
     );
   }
 
   void _showGameDetails(Map<String, dynamic> game) {
-    final isPostponed = game['postponed'] != null && game['postponed'] != '';
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -141,120 +112,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Дата: ${game['date']} ${game['time']}'),
-            Text('Место: ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
+            Text('Место: ${game['location']}'),
+            if (game['address'] != null) Text('Адрес: ${game['address']}'),
             Text('Счёт: ${game['score'] ?? 'не указан'}'),
-            if (isPostponed) Text('Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
+            if (game['postponed'] != null) Text('Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
             Text('Судья: ${game['referee'] ?? 'не назначен'}'),
             const SizedBox(height: 8),
-            if (game['referee'] != null && game['referee']!.isNotEmpty)
+            if (game['homeTeam'] != null)
               TextButton(
-                onPressed: () => context.push('/referee/${Uri.encodeComponent(game['referee']!)}'),
-                child: const Text('Профиль судьи'),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TeamProfileScreen(teamName: game['homeTeam']))),
+                child: const Text('Профиль команды хозяев'),
+              ),
+            if (game['awayTeam'] != null)
+              TextButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TeamProfileScreen(teamName: game['awayTeam']))),
+                child: const Text('Профиль команды гостей'),
               ),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть')),
         ],
-      ),
-    );
-  }
-
-  void _editGame(Map<String, dynamic> game) async {
-    final formKey = GlobalKey<FormState>();
-    final dateController = TextEditingController(text: game['date']);
-    final timeController = TextEditingController(text: game['time']);
-    final locationController = TextEditingController(text: game['location']);
-    final homeScoreController = TextEditingController(text: (game['score']?.split(':')[0] ?? ''));
-    final awayScoreController = TextEditingController(text: (game['score']?.split(':')[1] ?? ''));
-    final refereeController = TextEditingController(text: game['referee'] ?? '');
-    String? postponedType = game['postponed'] != null ? (game['postponed'] == 'неопределённый срок' ? 'undefined' : 'date') : null;
-    DateTime? postponedDate;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('Редактировать игру'),
-          content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(controller: dateController, decoration: const InputDecoration(labelText: 'Дата (ГГГГ-ММ-ДД)'), validator: (v) => v!.isEmpty ? 'Введите дату' : null),
-                  TextFormField(controller: timeController, decoration: const InputDecoration(labelText: 'Время (ЧЧ:ММ)'), validator: (v) => v!.isEmpty ? 'Введите время' : null),
-                  TextFormField(controller: locationController, decoration: const InputDecoration(labelText: 'Адрес'), validator: (v) => v!.isEmpty ? 'Введите адрес' : null),
-                  Row(children: [
-                    Expanded(child: TextFormField(controller: homeScoreController, decoration: const InputDecoration(labelText: 'Счёт хозяев'))),
-                    const SizedBox(width: 8),
-                    const Text(':'),
-                    const SizedBox(width: 8),
-                    Expanded(child: TextFormField(controller: awayScoreController, decoration: const InputDecoration(labelText: 'Счёт гостей'))),
-                  ]),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: postponedType,
-                    items: const [
-                      DropdownMenuItem(value: null, child: Text('Нет переноса')),
-                      DropdownMenuItem(value: 'date', child: Text('Перенос на дату')),
-                      DropdownMenuItem(value: 'undefined', child: Text('Перенос на неопределённый срок')),
-                    ],
-                    onChanged: (value) => setStateDialog(() {
-                      postponedType = value;
-                      if (value != 'date') postponedDate = null;
-                    }),
-                    decoration: const InputDecoration(labelText: 'Перенос игры'),
-                  ),
-                  if (postponedType == 'date')
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(context: dialogContext, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030));
-                        if (picked != null) {
-                          setStateDialog(() {
-                            postponedDate = picked;
-                          });
-                        }
-                      },
-                      child: Text(postponedDate == null ? 'Выбрать дату переноса' : 'Перенос: ${postponedDate!.toIso8601String().split('T')[0]}'),
-                    ),
-                  TextFormField(controller: refereeController, decoration: const InputDecoration(labelText: 'Судья (ФИО)')),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
-            ElevatedButton(
-              onPressed: () async {
-                if (formKey.currentState!.validate()) {
-                  final score = '${homeScoreController.text}:${awayScoreController.text}';
-                  String? postponedText;
-                  if (postponedType == 'date' && postponedDate != null) {
-                    postponedText = postponedDate!.toIso8601String().split('T')[0];
-                  } else if (postponedType == 'undefined') {
-                    postponedText = 'неопределённый срок';
-                  }
-                  final updatedGame = Map<String, dynamic>.from(game);
-                  updatedGame['date'] = dateController.text;
-                  updatedGame['time'] = timeController.text;
-                  updatedGame['location'] = locationController.text;
-                  updatedGame['score'] = score;
-                  updatedGame['postponed'] = postponedText;
-                  updatedGame['referee'] = refereeController.text;
-                  await _gameService.updateGame(updatedGame);
-                  await _notificationService.notifyGameChanged(updatedGame, 'изменена');
-                  if (dialogContext.mounted) {
-                    Navigator.pop(dialogContext);
-                    _loadSchedule();
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Игра обновлена, уведомления отправлены')));
-                  }
-                }
-              },
-              child: const Text('Сохранить'),
-            ),
-          ],
-        ),
       ),
     );
   }
