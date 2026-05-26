@@ -11,7 +11,7 @@ class TeamService {
     try {
       final res = await _supabase.client
           .from('team_members')
-          .select('user_id, role_in_team, profiles(full_name, phone, email, position, number, birth_date)')
+          .select('user_id, role_in_team, profiles(full_name, phone, email, position, number, experience, birth_date)')
           .eq('team_id', teamId);
       return List<Map<String, dynamic>>.from(res).map((member) {
         final profile = member['profiles'] as Map<String, dynamic>? ?? {};
@@ -22,6 +22,7 @@ class TeamService {
           'email': profile['email'],
           'position': profile['position'],
           'number': profile['number'],
+          'experience': profile['experience'],
           'birth_date': profile['birth_date'],
           'role_in_team': member['role_in_team'],
         };
@@ -38,15 +39,13 @@ class TeamService {
     required String phone,
     required String position,
     required int number,
-    required int age,
     required String email,
     required String password,
+    required String experience,
+    required String birthDate,
     required String createdBy,
   }) async {
     try {
-      final birthYear = DateTime.now().year - age;
-      final birthDate = DateTime(birthYear, 1, 1).toIso8601String().split('T')[0];
-      
       final userId = await _supabase.client.rpc(
         'create_user_and_profile',
         params: {
@@ -60,6 +59,7 @@ class TeamService {
       await _supabase.client
           .from('profiles')
           .update({
+            'experience': experience,
             'number': number,
             'birth_date': birthDate,
           })
@@ -94,6 +94,7 @@ class TeamService {
     required String phone,
     required String position,
     required int number,
+    required String birthDate,
   }) async {
     try {
       await _supabase.client
@@ -103,6 +104,7 @@ class TeamService {
             'phone': phone,
             'position': position,
             'number': number,
+            'birth_date': birthDate,
           })
           .eq('id', userId);
     } catch (e) {

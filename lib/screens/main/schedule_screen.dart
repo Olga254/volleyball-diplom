@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/game_service.dart';
-import '../team/team_profile_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -11,94 +11,351 @@ class ScheduleScreen extends StatefulWidget {
   State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen> {
+class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   List<Map<String, dynamic>> _myGames = [];
-  List<Map<String, dynamic>> _teamGames = [];
+  List<Map<String, dynamic>> _subscriptionGames = [];
   bool _isLoading = true;
   final GameService _gameService = GameService();
-  String? _currentUserRole;
 
   @override
   void initState() {
     super.initState();
-    _loadSchedule();
+    _loadGames();
   }
 
-  Future<void> _loadSchedule() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    _currentUserRole = authProvider.userProfile?['role'] ?? 'игрок';
+  Future<void> _loadGames() async {
+    setState(() => _isLoading = true);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final role = auth.userProfile?['role'];
+    final userId = auth.currentUser?.id;
+    final fanWantsGames = auth.fanWantsGames;
 
-    await Future.delayed(const Duration(milliseconds: 500));
-    setState(() {
-      final allGames = _gameService.getAllGames();
-      final role = _currentUserRole;
+    if (role == 'любитель') {
+      _myGames = await _gameService.getMyGames(userId);
+      _subscriptionGames = [];
+    } else if (role == 'болельщик') {
+      _myGames = await _gameService.getMyGames(userId);
+      _subscriptionGames = await _gameService.getGamesByUserSubscriptions(userId);
+      final hasMyGames = fanWantsGames && _myGames.isNotEmpty;
+      final hasSubscriptions = _subscriptionGames.isNotEmpty;
+      final tabCount = (hasMyGames ? 1 : 0) + (hasSubscriptions ? 1 : 0);
+      _tabController = TabController(length: tabCount > 0 ? tabCount : 1, vsync: this);
+    } else if (role == 'игрок') {
+      const teamId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+      _subscriptionGames = await _gameService.getGamesForTeam(teamId);
+      _myGames = [];
+      _tabController = TabController(length: 1, vsync: this);
+    } else {
+      _subscriptionGames = await _gameService.getAllGames();
+      _myGames = [];
+      _tabController = TabController(length: 1, vsync: this);
+    }
+    setState(() => _isLoading = false);
+  }
 
-      if (role == 'игрок') {
-        _teamGames = allGames;
-        _myGames = [];
-      } else if (role == 'любитель') {
-        _myGames = allGames.where((g) => _gameService.isJoined(g['id'])).toList();
-        _teamGames = [];
-      } else if (role == 'болельщик') {
-        _myGames = allGames.where((g) => _gameService.isJoined(g['id'])).toList();
-        _teamGames = allGames.where((g) => _gameService.isFollowing(g['homeTeam']) || _gameService.isFollowing(g['awayTeam'])).toList();
-      } else {
-        _teamGames = allGames;
-        _myGames = [];
-      }
-      _isLoading = false;
-    });
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isPlayer = _currentUserRole == 'игрок';
-    final displayGames = isPlayer ? _teamGames : (_myGames.isNotEmpty ? _myGames : _teamGames);
-    final title = isPlayer ? 'Расписание команды' : 'Расписание';
+    final auth = Provider.of<AuthProvider>(context);
+    final role = auth.userProfile?['role'];
+    final fanWantsGames = auth.fanWantsGames;
+
+    Widget body;
+    if (_isLoading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else {
+      final hasMyGames = (role == 'любитель' && _myGames.isNotEmpty) || (role == 'болельщик' && fanWantsGames && _myGames.isNotEmpty);
+      final hasSubscriptions = (role == 'болельщик' && _subscriptionGames.isNotEmpty) || (role == 'игрок' && _subscriptionGames.isNotEmpty);
+
+      if (role == 'любитель' && _myGames.isEmpty) {
+        body = const Center(child: Text('Вы ещё не записаны ни на одну игру'));
+      } else if (role == 'болельщик' && !hasMyGames && !hasSubscriptions) {
+        body = const Center(child: Text('Нет игр для отображения. Подпишитесь на команды или настройте "Игры для себя".'));
+      } else {
+        List<Widget> tabs = [];
+        List<Widget> tabViews = [];
+        if (hasMyGames) {
+          tabs.add(const Tab(text: 'Мои игры'));
+          tabViews.add(_buildGamesList(_myGames, isMyGames: true));
+        }
+        if (hasSubscriptions) {
+          tabs.add(Tab(text: role == 'игрок' ? 'Игры команды' : 'Подписки'));
+          tabViews.add(_buildGamesList(_subscriptionGames, isMyGames: false));
+        }
+
+        if (tabs.length == 1) {
+          body = tabViews.first;
+        } else {
+          body = Column(
+            children: [
+              TabBar(controller: _tabController, tabs: tabs),
+              Expanded(child: TabBarView(controller: _tabController, children: tabViews)),
+            ],
+          );
+        }
+      }
+    }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadSchedule,
-              child: displayGames.isEmpty
-                  ? const Center(child: Text('Нет игр для отображения'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: displayGames.length,
-                      itemBuilder: (context, index) => _buildGameCard(displayGames[index]),
-                    ),
-            ),
+      appBar: AppBar(title: const Text('Расписание')),
+      body: body,
+      bottomNavigationBar: _buildBottomNavigationBar(role, fanWantsGames),
     );
   }
 
-  Widget _buildGameCard(Map<String, dynamic> game) {
-    final isPostponed = game['postponed'] != null && game['postponed'] != '';
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      child: ListTile(
-        title: Text('${game['homeTeam'] ?? '?'} - ${game['awayTeam'] ?? '?'}', style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('📅 ${game['date']} ${game['time']}'),
-            Text('📍 ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
-            if (game['address'] != null) Text('🏠 ${game['address']}'),
-            Text('👨‍⚖️ Судья: ${game['referee'] ?? 'не назначен'}'),
-            if (isPostponed) Text('⚠️ Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
-          ],
-        ),
-        trailing: game['score'] != null ? Chip(label: Text(game['score']), backgroundColor: Colors.green[100]) : null,
-        onTap: () => _showGameDetails(game),
-      ),
+  Widget _buildBottomNavigationBar(String role, bool fanWantsGames) {
+    List<BottomNavigationBarItem> items;
+    if (role == 'игрок') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'любитель') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'болельщик') {
+      if (fanWantsGames) {
+        items = const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      } else {
+        items = const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      }
+    } else if (role == 'admin') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'captain') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    }
+
+    final currentLocation = GoRouterState.of(context).uri.path;
+    int currentIndex = 0;
+    if (role == 'игрок') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/team') {
+        currentIndex = 1;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    } else if (role == 'любитель') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/game-search') {
+        currentIndex = 1;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    } else if (role == 'болельщик') {
+      if (fanWantsGames) {
+        if (currentLocation == '/home') {
+          currentIndex = 0;
+        } else if (currentLocation == '/game-search') {
+          currentIndex = 1;
+        } else if (currentLocation == '/schedule') {
+          currentIndex = 2;
+        } else if (currentLocation == '/teams-follow') {
+          currentIndex = 3;
+        } else if (currentLocation == '/profile') {
+          currentIndex = 4;
+        }
+      } else {
+        if (currentLocation == '/home') {
+          currentIndex = 0;
+        } else if (currentLocation == '/schedule') {
+          currentIndex = 1;
+        } else if (currentLocation == '/teams-follow') {
+          currentIndex = 2;
+        } else if (currentLocation == '/profile') {
+          currentIndex = 3;
+        }
+      }
+    } else if (role == 'admin') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 1;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 2;
+      }
+    } else if (role == 'captain') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 1;
+      } else if (currentLocation == '/team') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    }
+
+    return BottomNavigationBar(
+      currentIndex: currentIndex,
+      onTap: (index) => _onTabTapped(index, context, role, fanWantsGames),
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: Colors.purple,
+      unselectedItemColor: Colors.grey,
+      items: items,
+    );
+  }
+
+  void _onTabTapped(int index, BuildContext context, String role, bool fanWantsGames) {
+    switch (role) {
+      case 'игрок':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/team');
+        }
+        if (index == 2) {
+          context.go('/schedule');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+      case 'любитель':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/game-search');
+        }
+        if (index == 2) {
+          context.go('/schedule');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+      case 'болельщик':
+        if (fanWantsGames) {
+          if (index == 0) {
+            context.go('/home');
+          }
+          if (index == 1) {
+            context.go('/game-search');
+          }
+          if (index == 2) {
+            context.go('/schedule');
+          }
+          if (index == 3) {
+            context.go('/teams-follow');
+          }
+          if (index == 4) {
+            context.go('/profile');
+          }
+        } else {
+          if (index == 0) {
+            context.go('/home');
+          }
+          if (index == 1) {
+            context.go('/schedule');
+          }
+          if (index == 2) {
+            context.go('/teams-follow');
+          }
+          if (index == 3) {
+            context.go('/profile');
+          }
+        }
+        break;
+      case 'admin':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/schedule');
+        }
+        if (index == 2) {
+          context.go('/profile');
+        }
+        break;
+      case 'captain':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/schedule');
+        }
+        if (index == 2) {
+          context.go('/team');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+    }
+  }
+
+  Widget _buildGamesList(List<Map<String, dynamic>> games, {required bool isMyGames}) {
+    if (games.isEmpty) {
+      return const Center(child: Text('Нет игр'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: games.length,
+      itemBuilder: (context, index) {
+        final g = games[index];
+        final isPostponed = g['postponed'] != null && g['postponed'] != '';
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            title: Text(g['title'] ?? 'Игра', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('📅 ${g['date']} ${g['start_time']}'),
+                Text('📍 ${g['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
+                Text('👨‍⚖️ Судья: ${g['referee'] ?? 'не назначен'}'),
+                if (isPostponed) Text('⚠️ Перенос: ${g['postponed']}', style: const TextStyle(color: Colors.red)),
+              ],
+            ),
+            trailing: isMyGames && g['isJoined'] == true ? const Icon(Icons.check_circle, color: Colors.green) : null,
+            onTap: () => _showGameDetails(g),
+          ),
+        );
+      },
     );
   }
 
@@ -106,28 +363,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('${game['homeTeam']} vs ${game['awayTeam']}'),
+        title: Text(game['title'] ?? 'Игра'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Дата: ${game['date']} ${game['time']}'),
+            Text('Дата: ${game['date']} ${game['start_time']}'),
             Text('Место: ${game['location']}'),
             if (game['address'] != null) Text('Адрес: ${game['address']}'),
             Text('Счёт: ${game['score'] ?? 'не указан'}'),
             if (game['postponed'] != null) Text('Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),
             Text('Судья: ${game['referee'] ?? 'не назначен'}'),
-            const SizedBox(height: 8),
-            if (game['homeTeam'] != null)
-              TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TeamProfileScreen(teamName: game['homeTeam']))),
-                child: const Text('Профиль команды хозяев'),
-              ),
-            if (game['awayTeam'] != null)
-              TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TeamProfileScreen(teamName: game['awayTeam']))),
-                child: const Text('Профиль команды гостей'),
-              ),
           ],
         ),
         actions: [

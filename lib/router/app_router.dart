@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/auth/authorization_screen.dart';
 import '../screens/auth/registration_screen.dart';
@@ -30,31 +31,40 @@ class AppRouter {
   static final _router = GoRouter(
     initialLocation: '/authorization',
     routes: [
+      // Авторизация и регистрация (без нижней панели)
       GoRoute(path: '/authorization', builder: (context, state) => const AuthorizationScreen()),
-      GoRoute(path: '/role-selection', builder: (context, state) => const RoleSelectionScreen()),
       GoRoute(path: '/registration', builder: (context, state) => const RegistrationScreen()),
+      GoRoute(path: '/role-selection', builder: (context, state) => const RoleSelectionScreen()),
       GoRoute(path: '/role-details', builder: (context, state) => const RoleDetailsScreen()),
-      GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
-      GoRoute(path: '/team', builder: (context, state) => const TeamScreen()),
+      
+      // ShellRoute для основных экранов с нижней панелью
+      ShellRoute(
+        builder: (context, state, child) {
+          return Scaffold(
+            body: child,
+          );
+        },
+        routes: [
+          GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+          GoRoute(path: '/team', builder: (context, state) => const TeamScreen()),
+          GoRoute(path: '/schedule', builder: (context, state) => const ScheduleScreen()),
+          GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+          GoRoute(path: '/game-search', builder: (context, state) => const GameSearchScreen()),
+          GoRoute(path: '/teams-follow', builder: (context, state) => const TeamsFollowScreen()),
+        ],
+      ),
+      
+      // Вложенные экраны (без нижней панели)
       GoRoute(path: '/team/add-player', builder: (context, state) => const AddPlayerScreen()),
-      GoRoute(path: '/schedule', builder: (context, state) => const ScheduleScreen()),
-      GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
-      GoRoute(path: '/game-search', builder: (context, state) => const GameSearchScreen()),
-      GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
-      GoRoute(path: '/teams-follow', builder: (context, state) => const TeamsFollowScreen()),
-      // Админские маршруты
       GoRoute(path: '/admin', builder: (context, state) => const AdminPanelScreen()),
       GoRoute(path: '/admin/users', builder: (context, state) => const AdminUsersScreen()),
       GoRoute(path: '/admin/games', builder: (context, state) => const AdminGamesScreen()),
-      // Капитанские маршруты
       GoRoute(path: '/captain', builder: (context, state) => const CaptainPanelScreen()),
       GoRoute(path: '/captain/create-game', builder: (context, state) => const CaptainCreateGameScreen()),
-      // Профиль судьи
       GoRoute(path: '/referee/:name', builder: (context, state) {
         final name = state.pathParameters['name']!;
         return RefereeProfileScreen(refereeName: name);
       }),
-      // Новые маршруты
       GoRoute(path: '/fan-settings', builder: (context, state) => const FanSettingsScreen()),
       GoRoute(path: '/amateur/create-game', builder: (context, state) => const AmateurCreateGameScreen()),
       GoRoute(path: '/amateur/application', builder: (context, state) => const AmateurApplicationScreen()),
@@ -63,10 +73,11 @@ class AppRouter {
         return AmateurApplicationsListScreen(gameId: gameId);
       }),
       GoRoute(path: '/invitations', builder: (context, state) => const InvitationsScreen()),
-      GoRoute(path: '/team-profile/:name', builder: (context, state) {
-        final name = state.pathParameters['name']!;
-        return TeamProfileScreen(teamName: name);
+      GoRoute(path: '/team-profile/:teamId', builder: (context, state) {
+        final teamId = state.pathParameters['teamId']!;
+        return TeamProfileScreen(teamId: teamId);
       }),
+      GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
     ],
   );
 }

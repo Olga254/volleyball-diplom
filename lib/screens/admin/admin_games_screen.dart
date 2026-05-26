@@ -23,8 +23,7 @@ class _AdminGamesScreenState extends State<AdminGamesScreen> {
 
   Future<void> _loadGames() async {
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 500));
-    _games = _gameService.getAllGamesForAdmin();
+    _games = await _gameService.getAllGames(); // используем getAllGames вместо getAllGamesForAdmin
     setState(() => _isLoading = false);
   }
 
@@ -52,11 +51,11 @@ class _AdminGamesScreenState extends State<AdminGamesScreen> {
                     children: [
                       ListTile(
                         leading: const Icon(Icons.sports_volleyball, color: Colors.blue),
-                        title: Text('${game['homeTeam']} vs ${game['awayTeam']}'),
+                        title: Text(game['title'] ?? '${game['homeTeam']} - ${game['awayTeam']}'),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Дата: ${game['date']} ${game['time']}'),
+                            Text('Дата: ${game['date']} ${game['start_time']}'),
                             Text('Место: ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
                             if (game['score'] != null && game['score']!.isNotEmpty)
                               Text('Счёт: ${game['score']}'),
@@ -81,7 +80,7 @@ class _AdminGamesScreenState extends State<AdminGamesScreen> {
   void _editGame(BuildContext context, Map<String, dynamic> game) {
     final formKey = GlobalKey<FormState>();
     final dateController = TextEditingController(text: game['date']);
-    final timeController = TextEditingController(text: game['time']);
+    final timeController = TextEditingController(text: game['start_time']);
     final locationController = TextEditingController(text: game['location']);
     final homeScoreController = TextEditingController(text: (game['score']?.split(':')[0] ?? ''));
     final awayScoreController = TextEditingController(text: (game['score']?.split(':')[1] ?? ''));
@@ -127,7 +126,7 @@ class _AdminGamesScreenState extends State<AdminGamesScreen> {
                   if (postponedType == 'date')
                     TextButton(
                       onPressed: () async {
-                        final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030));
+                        final picked = await showDatePicker(context: dialogContext, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030));
                         if (picked != null) {
                           setStateDialog(() {
                             postponedDate = picked;
@@ -155,7 +154,7 @@ class _AdminGamesScreenState extends State<AdminGamesScreen> {
                   }
                   final updatedGame = Map<String, dynamic>.from(game);
                   updatedGame['date'] = dateController.text;
-                  updatedGame['time'] = timeController.text;
+                  updatedGame['start_time'] = timeController.text;
                   updatedGame['location'] = locationController.text;
                   updatedGame['score'] = score;
                   updatedGame['postponed'] = postponedText;

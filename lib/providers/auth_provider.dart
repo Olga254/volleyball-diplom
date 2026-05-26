@@ -11,13 +11,14 @@ class AuthProvider with ChangeNotifier {
   Map<String, dynamic>? _userProfile;
   String? _selectedRole;
 
-  // ID фиксированной команды (должна существовать в БД)
   static const String _teamId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
   User? get currentUser => _currentUser;
   Map<String, dynamic>? get userProfile => _userProfile;
   String? get selectedRole => _selectedRole;
   bool get isLoggedIn => _currentUser != null;
+  bool get isFanPlayer => _userProfile?['fan_plays_self'] == true;
+  bool get fanWantsGames => _userProfile?['fan_wants_games'] == true;
 
   void setRole(String role) {
     _selectedRole = role;
@@ -30,38 +31,21 @@ class AuthProvider with ChangeNotifier {
     return digest.toString();
   }
 
-  // МОК-ВХОД ДЛЯ ТЕСТОВЫХ ПОЛЬЗОВАТЕЛЕЙ
   void signInAsMock(String role, String fullName, String email, String position, String experience) {
-    _currentUser = User(
-      id: 'mock-$role-id',
-      appMetadata: {},
-      userMetadata: {},
-      aud: 'authenticated',
-      createdAt: DateTime.now().toIso8601String(),
-    );
+    _currentUser = User(id: 'mock-$role-id', appMetadata: {}, userMetadata: {}, aud: 'authenticated', createdAt: DateTime.now().toIso8601String());
     _userProfile = {
-      'id': 'mock-$role-id',
-      'email': email,
-      'full_name': fullName,
-      'phone': '+79990000000',
-      'role': role,
-      'birth_date': '1990-01-01',
-      'position': position,
-      'experience': experience,
+      'id': 'mock-$role-id', 'email': email, 'full_name': fullName, 'phone': '+79990000000',
+      'role': role, 'birth_date': '1990-01-01', 'position': position, 'experience': experience,
       'created_at': DateTime.now().toIso8601String(),
     };
     _selectedRole = role;
     notifyListeners();
   }
 
-  // Администратор (двойное нажатие)
   Future<void> signInAsAdmin(String email, String password) async {
     try {
       final cleanedEmail = email.trim().toLowerCase();
-      final AuthResponse res = await _supabase.client.auth.signInWithPassword(
-        email: cleanedEmail,
-        password: password,
-      );
+      final res = await _supabase.client.auth.signInWithPassword(email: cleanedEmail, password: password);
       _currentUser = res.user;
       await _loadUserProfile();
       _selectedRole = _userProfile?['role'];
@@ -72,14 +56,10 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Капитан (тройное нажатие)
   Future<void> signInAsCaptain(String email, String password) async {
     try {
       final cleanedEmail = email.trim().toLowerCase();
-      final AuthResponse res = await _supabase.client.auth.signInWithPassword(
-        email: cleanedEmail,
-        password: password,
-      );
+      final res = await _supabase.client.auth.signInWithPassword(email: cleanedEmail, password: password);
       _currentUser = res.user;
       await _loadUserProfile();
       _selectedRole = _userProfile?['role'];
@@ -90,30 +70,17 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Загрузка профиля после входа
   Future<void> _loadUserProfile() async {
     if (_currentUser == null) return;
-    final profileResponse = await _supabase.client
-        .from('profiles')
-        .select()
-        .eq('id', _currentUser!.id)
-        .maybeSingle();
+    final profileResponse = await _supabase.client.from('profiles').select().eq('id', _currentUser!.id).maybeSingle();
     if (profileResponse == null) {
       final userMeta = _currentUser!.userMetadata ?? {};
       final newProfile = {
-        'id': _currentUser!.id,
-        'email': _currentUser!.email,
-        'full_name': userMeta['full_name'] ?? 'Пользователь',
-        'phone': userMeta['phone'] ?? '',
-        'role': userMeta['role'] ?? 'игрок',
-        'birth_date': userMeta['birth_date'],
-        'position': userMeta['position'],
-        'team_name': userMeta['team_name'],
-        'experience': userMeta['experience'] ?? '',
-        'password_hash': '',
-        'password_changed_at': DateTime.now().toUtc().toIso8601String(),
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'id': _currentUser!.id, 'email': _currentUser!.email, 'full_name': userMeta['full_name'] ?? 'Пользователь',
+        'phone': userMeta['phone'] ?? '', 'role': userMeta['role'] ?? 'игрок', 'birth_date': userMeta['birth_date'],
+        'position': userMeta['position'], 'team_name': userMeta['team_name'], 'experience': userMeta['experience'] ?? '',
+        'password_hash': '', 'password_changed_at': DateTime.now().toUtc().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(), 'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
       await _supabase.client.from('profiles').insert(newProfile);
       _userProfile = newProfile;
@@ -122,24 +89,16 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Обычный вход через Supabase
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signIn({required String email, required String password}) async {
     try {
       final cleanedEmail = email.trim().toLowerCase();
-      final AuthResponse res = await _supabase.client.auth.signInWithPassword(
-        email: cleanedEmail,
-        password: password,
-      );
+      final res = await _supabase.client.auth.signInWithPassword(email: cleanedEmail, password: password);
       _currentUser = res.user;
       await _loadUserProfile();
       _selectedRole = _userProfile?['role'];
       await AuthStorage.saveCredentials(email, password);
       notifyListeners();
-    } on AuthException catch (e) {
-      debugPrint('AuthException: ${e.message}');
+    } on AuthException {
       throw Exception('Неверный email или пароль');
     } catch (e) {
       debugPrint('Ошибка входа: $e');
@@ -147,17 +106,9 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Регистрация (с добавлением в команду для игроков)
   Future<void> signUp({
-    required String email,
-    required String password,
-    required String fullName,
-    required String phone,
-    required String role,
-    required DateTime birthDate,
-    String? position,
-    String? teamName,
-    String? experience,
+    required String email, required String password, required String fullName, required String phone,
+    required String role, required DateTime birthDate, String? position, String? teamName, String? experience,
   }) async {
     try {
       final cleanedEmail = email.trim().toLowerCase();
@@ -176,60 +127,37 @@ class AuthProvider with ChangeNotifier {
       if (birthDate.isAfter(minAgeDate)) throw Exception('Возраст должен быть не менее 14 лет');
 
       final passwordHash = _generatePasswordHash(password);
-
-      final AuthResponse authResponse = await _supabase.client.auth.signUp(
-        email: cleanedEmail,
-        password: password,
+      final authResponse = await _supabase.client.auth.signUp(
+        email: cleanedEmail, password: password,
         data: {
-          'full_name': fullName.trim(),
-          'phone': cleanedPhone,
-          'role': role,
-          'birth_date': birthDate.toIso8601String().split('T')[0],
-          'position': position,
-          'team_name': teamName,
-          'experience': experience ?? '',
+          'full_name': fullName.trim(), 'phone': cleanedPhone, 'role': role,
+          'birth_date': birthDate.toIso8601String().split('T')[0], 'position': position,
+          'team_name': teamName, 'experience': experience ?? '',
         },
       );
       if (authResponse.user == null) throw Exception('Регистрация не удалась');
       _currentUser = authResponse.user;
 
       final profileData = {
-        'id': _currentUser!.id,
-        'email': cleanedEmail,
-        'full_name': fullName.trim(),
-        'phone': cleanedPhone,
-        'role': role,
-        'birth_date': birthDate.toIso8601String().split('T')[0],
-        'position': position,
-        'team_name': teamName,
-        'experience': experience ?? '',
-        'password_hash': passwordHash,
+        'id': _currentUser!.id, 'email': cleanedEmail, 'full_name': fullName.trim(), 'phone': cleanedPhone,
+        'role': role, 'birth_date': birthDate.toIso8601String().split('T')[0], 'position': position,
+        'team_name': teamName, 'experience': experience ?? '', 'password_hash': passwordHash,
         'password_changed_at': DateTime.now().toUtc().toIso8601String(),
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(), 'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
       await _supabase.client.from('profiles').insert(profileData);
       await _supabase.client.from('password_history').insert({
-        'user_id': _currentUser!.id,
-        'password_hash': passwordHash,
-        'changed_at': DateTime.now().toUtc().toIso8601String(),
+        'user_id': _currentUser!.id, 'password_hash': passwordHash, 'changed_at': DateTime.now().toUtc().toIso8601String(),
       });
 
-      final createdProfile = await _supabase.client
-          .from('profiles')
-          .select()
-          .eq('id', _currentUser!.id)
-          .single();
+      final createdProfile = await _supabase.client.from('profiles').select().eq('id', _currentUser!.id).single();
       _userProfile = createdProfile;
       _selectedRole = role;
 
-      // Добавляем игрока в команду (только если роль 'игрок')
       if (role == 'игрок') {
         try {
           await _supabase.client.from('team_members').insert({
-            'team_id': _teamId,
-            'user_id': _currentUser!.id,
-            'role_in_team': 'игрок',
+            'team_id': _teamId, 'user_id': _currentUser!.id, 'role_in_team': 'игрок',
           });
         } catch (e) {
           debugPrint('Ошибка добавления в команду: $e');
@@ -248,19 +176,14 @@ class AuthProvider with ChangeNotifier {
       }
       throw Exception('Ошибка регистрации: ${e.message}');
     } catch (e) {
-      debugPrint('Ошибка регистрации: $e');
       rethrow;
     }
   }
 
-  // Обновление роли
   Future<void> updateRole(String newRole) async {
     if (_currentUser == null) return;
     try {
-      await _supabase.client
-          .from('profiles')
-          .update({'role': newRole})
-          .eq('id', _currentUser!.id);
+      await _supabase.client.from('profiles').update({'role': newRole}).eq('id', _currentUser!.id);
       _userProfile?['role'] = newRole;
       _selectedRole = newRole;
       notifyListeners();
@@ -269,14 +192,10 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Обновление профиля
   Future<void> updateProfile(Map<String, dynamic> data) async {
     if (_currentUser == null) return;
     try {
-      await _supabase.client
-          .from('profiles')
-          .update(data)
-          .eq('id', _currentUser!.id);
+      await _supabase.client.from('profiles').update(data).eq('id', _currentUser!.id);
       _userProfile?.addAll(data);
       notifyListeners();
     } catch (e) {
@@ -284,7 +203,18 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Выход
+  Future<void> updateFanSettings(bool playsSelf, bool wantsGames) async {
+    if (_currentUser == null) return;
+    try {
+      await _supabase.client.from('profiles').update({'fan_plays_self': playsSelf, 'fan_wants_games': wantsGames}).eq('id', _currentUser!.id);
+      _userProfile?['fan_plays_self'] = playsSelf;
+      _userProfile?['fan_wants_games'] = wantsGames;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Ошибка обновления настроек болельщика: $e');
+    }
+  }
+
   Future<void> signOut() async {
     await _supabase.client.auth.signOut();
     _currentUser = null;
@@ -294,29 +224,6 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Настройки болельщика
-  Future<void> updateFanSettings(bool playsSelf, bool wantsGames) async {
-    if (_currentUser == null) return;
-    try {
-      await _supabase.client
-          .from('profiles')
-          .update({
-            'fan_plays_self': playsSelf,
-            'fan_wants_games': wantsGames,
-          })
-          .eq('id', _currentUser!.id);
-      _userProfile?['fan_plays_self'] = playsSelf;
-      _userProfile?['fan_wants_games'] = wantsGames;
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Ошибка обновления настроек болельщика: $e');
-    }
-  }
-
-  bool get isFanPlayer => _userProfile?['fan_plays_self'] == true;
-  bool get fanWantsGames => _userProfile?['fan_wants_games'] == true;
-
-  // Вспомогательная очистка номера телефона
   String _cleanPhoneNumber(String phone) {
     String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
     if (cleaned.startsWith('8')) {

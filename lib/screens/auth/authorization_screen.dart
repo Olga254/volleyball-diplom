@@ -50,11 +50,12 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
     final email = _emailController.text.trim().toLowerCase();
 
     try {
+      // Используем RPC-функцию для поиска
       final profile = await _supabase.client
-          .from('profiles')
-          .select()
-          .ilike('email', email)
+          .rpc('find_user_by_email', params: {'p_email': email})
           .maybeSingle();
+
+      if (!mounted) return;
 
       if (profile != null) {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -70,14 +71,12 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
           context.go('/home');
         }
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Пользователь с таким email не найден. Зарегистрируйтесь.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Пользователь с таким email не найден. Зарегистрируйтесь.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -101,12 +100,7 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
           decoration: const InputDecoration(labelText: 'Введите ваш email', border: OutlineInputBorder()),
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-            },
-            child: const Text('Отмена'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(dialogContext);

@@ -36,19 +36,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _phoneController.addListener(_formatPhoneNumber);
   }
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    _fullNameController.dispose();
-    _phoneController.removeListener(_formatPhoneNumber);
-    _phoneController.dispose();
-    _teamNameController.dispose();
-    _experienceController.dispose();
-    super.dispose();
-  }
-
   void _formatPhoneNumber() {
     final text = _phoneController.text;
     if (text.isEmpty) return;
@@ -108,13 +95,26 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now().subtract(const Duration(days: 365 * 18)),
+      initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
     );
     if (picked != null && picked != _selectedDate) {
       setState(() => _selectedDate = picked);
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _fullNameController.dispose();
+    _phoneController.removeListener(_formatPhoneNumber);
+    _phoneController.dispose();
+    _teamNameController.dispose();
+    _experienceController.dispose();
+    super.dispose();
   }
 
   @override
@@ -320,7 +320,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               const SizedBox(height: 20),
               Center(
                 child: TextButton(
-                  onPressed: () => context.go('/role-selection'),
+                  onPressed: () => context.go('/authorization'),
                   child: RichText(
                     text: TextSpan(
                       style: TextStyle(color: Colors.grey.shade700),
@@ -368,15 +368,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         );
         await AuthStorage.saveCredentials(_emailController.text.trim(), _passwordController.text);
         if (mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              title: const Row(children: [Icon(Icons.check_circle, color: Colors.green), SizedBox(width: 10), Text('Регистрация успешна!')]),
-              content: const Column(mainAxisSize: MainAxisSize.min, children: [Text('Добро пожаловать!'), SizedBox(height: 10), Text('Теперь войдите в систему.')]),
-              actions: [TextButton(onPressed: () { Navigator.pop(context); context.go('/authorization'); }, child: const Text('Войти'))],
-            ),
+          // Показываем уведомление об успешной регистрации
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Регистрация успешна!'), backgroundColor: Colors.green),
           );
+          // Переходим на экран авторизации, где поля уже будут заполнены благодаря AuthStorage
+          context.go('/authorization');
         }
       } catch (e) {
         setState(() => _errorMessage = e.toString().replaceFirst('Exception: ', ''));

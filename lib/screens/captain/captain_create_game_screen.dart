@@ -55,24 +55,22 @@ class _CaptainCreateGameScreenState extends State<CaptainCreateGameScreen> {
     );
   }
 
-  void _createGame() async {
+  Future<void> _createGame() async {
     if (_formKey.currentState!.validate()) {
       final newGame = {
-        'id': 0,
         'title': '${_homeTeamController.text} - ${_awayTeamController.text}',
-        'homeTeam': _homeTeamController.text,
-        'awayTeam': _awayTeamController.text,
+        'home_team_id': null,
+        'away_team_id': null,
         'date': _dateController.text,
-        'time': _timeController.text,
+        'start_time': _timeController.text,
         'location': _locationController.text,
-        'score': '',
-        'postponed': null,
         'referee': _refereeController.text,
+        'created_by_type': 'captain',
       };
       await _gameService.createGame(newGame);
       await _notificationService.sendNotificationToAll(
         title: 'Новая игра',
-        message: 'Создана игра: ${newGame['homeTeam']} - ${newGame['awayTeam']} на ${newGame['date']}',
+        message: 'Создана игра: ${newGame['title']} на ${newGame['date']}',
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Игра создана, уведомления отправлены')));

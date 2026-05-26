@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/game_service.dart';
-import '../amateur/amateur_create_game_screen.dart';
-import '../amateur/amateur_application_screen.dart';
+import '../../services/invitation_service.dart';
 
 class GameSearchScreen extends StatefulWidget {
   const GameSearchScreen({super.key});
@@ -12,57 +12,149 @@ class GameSearchScreen extends StatefulWidget {
   State<GameSearchScreen> createState() => _GameSearchScreenState();
 }
 
-class _GameSearchScreenState extends State<GameSearchScreen> {
+class _GameSearchScreenState extends State<GameSearchScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   List<Map<String, dynamic>> _games = [];
-  bool _isLoading = true;
+  bool _isLoadingGames = true;
   final GameService _gameService = GameService();
+  final InvitationService _invitationService = InvitationService();
+  String? _currentUserId;
 
-  // Фильтры
-  String? _filterSurface; // 'зал', 'пляж'
-  String? _filterGender;  // 'женская', 'мужская', 'смешанная'
-  String? _filterAge;     // 'U18', 'U21', 'Open'
-  String? _filterLevel;   // 'Любитель', 'Продвинутый', 'PRO'
+  String? _filterSurface;
+  String? _filterGender;
+  String? _filterAge;
+  String? _filterLevel;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadCurrentUser();
     _loadGames();
   }
 
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    _currentUserId = Provider.of<AuthProvider>(context, listen: false).currentUser?.id;
+  }
+
   Future<void> _loadGames() async {
-    setState(() => _isLoading = true);
-    final allGames = _gameService.getAllGamesForAdmin();
-    _games = allGames.where((g) => 
-      g['created_by_type'] == 'amateur' || g['type'] == 'friendly'
-    ).toList();
-    setState(() => _isLoading = false);
+    setState(() => _isLoadingGames = true);
+    final allGames = await _gameService.getAllGamesForSearch();
+    _games = allGames;
+    setState(() => _isLoadingGames = false);
   }
 
   List<Map<String, dynamic>> get _filteredGames {
     return _games.where((game) {
-      if (_filterSurface != null && game['surface'] != _filterSurface) return false;
-      if (_filterGender != null && game['target_gender'] != _filterGender) return false;
-      if (_filterAge != null && game['target_age'] != _filterAge) return false;
-      if (_filterLevel != null && game['level'] != _filterLevel) return false;
+      if (_filterSurface != null && game['surface'] != _filterSurface) {
+        return false;
+      }
+      if (_filterGender != null && game['target_gender'] != _filterGender) {
+        return false;
+      }
+      if (_filterAge != null && game['target_age'] != _filterAge) {
+        return false;
+      }
+      if (_filterLevel != null && game['level'] != _filterLevel) {
+        return false;
+      }
       return true;
     }).toList();
   }
 
+  void _toggleJoin(Map<String, dynamic> game) {
+    setState(() {
+      if (game['isJoined'] == true) {
+        _gameService.leaveGame(game['id']);
+        game['isJoined'] = false;
+      } else {
+        _gameService.joinGame(game['id']);
+        game['isJoined'] = true;
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(game['isJoined'] ? 'Вы записаны на игру' : 'Вы отказались')));
+  }
+
+  Future<void> _showInviteDialog(Map<String, dynamic> game) async {
+    final emailController = TextEditingController();
+    Map<String, dynamic>? foundUser;
+    final scaffoldContext = context;
+    await showDialog(
+      context: scaffoldContext,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Пригласить игрока'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(labelText: 'Email приглашаемого'),
+                onChanged: (value) async {
+                  if (value.length > 3) {
+                    final user = await _invitationService.findUserByEmail(value);
+                    if (user != null) {
+                      setStateDialog(() => foundUser = user);
+                    }
+                  }
+                },
+              ),
+              if (foundUser != null)
+                ListTile(
+                  title: Text(foundUser!['full_name']),
+                  subtitle: Text(foundUser!['email']),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
+            ElevatedButton(
+              onPressed: () async {
+                if (foundUser != null) {
+                  await _invitationService.inviteToGame(
+                    gameId: game['id'],
+                    inviterId: _currentUserId!,
+                    inviteeId: foundUser!['id'],
+                  );
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                  }
+                  if (scaffoldContext.mounted) {
+                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(const SnackBar(content: Text('Приглашение отправлено')));
+                  }
+                }
+              },
+              child: const Text('Пригласить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showParticipantsList(Map<String, dynamic> game) async {
-    final participants = await _gameService.getGameParticipants(game['id']);
-    if (!mounted) return;
+    final participants = await _invitationService.getAcceptedParticipants(game['id']);
+    if (!mounted) {
+      return;
+    }
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Участники игры "${game['title']}"', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Приглашённые игроки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
             if (participants.isEmpty)
-              const Text('Пока никто не записался')
+              const Text('Нет принявших приглашение')
             else
               ...participants.map((p) => ListTile(title: Text(p['full_name']), leading: const Icon(Icons.person))),
           ],
@@ -71,156 +163,431 @@ class _GameSearchScreenState extends State<GameSearchScreen> {
     );
   }
 
-  void _toggleJoin(Map<String, dynamic> game) {
-    final isJoined = game['joined'] ?? false;
-    setState(() {
-      if (isJoined) {
-        _gameService.leaveGame(game['id']);
-        game['joined'] = false;
-      } else {
-        _gameService.joinGame(game['id']);
-        game['joined'] = true;
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(game['joined'] ? 'Вы записаны на игру' : 'Вы отказались от участия')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final role = auth.userProfile?['role'];
-    final canCreateGame = role == 'любитель' || role == 'admin' || role == 'captain';
-    final canCreateApplication = role == 'любитель';
+    final fanWantsGames = auth.fanWantsGames;
+    final canCreateGame = (role == 'любитель') || (role == 'admin');
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Поиск игр'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          if (canCreateGame)
-            IconButton(
-              icon: const Icon(Icons.add_circle),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AmateurCreateGameScreen())),
-              tooltip: 'Создать игру',
-            ),
-          if (canCreateApplication)
-            IconButton(
-              icon: const Icon(Icons.assignment),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AmateurApplicationScreen())),
-              tooltip: 'Моя анкета',
-            ),
-        ],
-      ),
       body: Column(
         children: [
-          // Удалена строка поиска
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          Padding(
+            padding: const EdgeInsets.all(8),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                FilterChip(label: const Text('Зал'), selected: _filterSurface == 'зал', onSelected: (s) => setState(() => _filterSurface = s ? 'зал' : null)),
-                const SizedBox(width: 8),
-                FilterChip(label: const Text('Пляж'), selected: _filterSurface == 'пляж', onSelected: (s) => setState(() => _filterSurface = s ? 'пляж' : null)),
-                const SizedBox(width: 8),
-                FilterChip(label: const Text('Женская'), selected: _filterGender == 'женская', onSelected: (s) => setState(() => _filterGender = s ? 'женская' : null)),
-                const SizedBox(width: 8),
-                FilterChip(label: const Text('Мужская'), selected: _filterGender == 'мужская', onSelected: (s) => setState(() => _filterGender = s ? 'мужская' : null)),
-                const SizedBox(width: 8),
-                FilterChip(label: const Text('Смешанная'), selected: _filterGender == 'смешанная', onSelected: (s) => setState(() => _filterGender = s ? 'смешанная' : null)),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  hint: const Text('Возраст'),
-                  value: _filterAge,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Все')),
-                    DropdownMenuItem(value: 'U18', child: Text('U18')),
-                    DropdownMenuItem(value: 'U21', child: Text('U21')),
-                    DropdownMenuItem(value: 'Open', child: Text('Open')),
-                  ],
-                  onChanged: (v) => setState(() => _filterAge = v),
-                ),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  hint: const Text('Уровень'),
-                  value: _filterLevel,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Все')),
-                    DropdownMenuItem(value: 'Любитель', child: Text('Любитель')),
-                    DropdownMenuItem(value: 'Продвинутый', child: Text('Продвинутый')),
-                    DropdownMenuItem(value: 'PRO', child: Text('PRO')),
-                  ],
-                  onChanged: (v) => setState(() => _filterLevel = v),
+                if (canCreateGame)
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () => context.push('/amateur/create-game'),
+                    tooltip: 'Создать игру',
+                  ),
+                if (role == 'любитель')
+                  IconButton(
+                    icon: const Icon(Icons.assignment),
+                    onPressed: () => context.push('/amateur/application'),
+                    tooltip: 'Моя анкета',
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.mail),
+                  onPressed: () => context.push('/invitations'),
+                  tooltip: 'Приглашения',
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'Поиск игр'),
+              Tab(text: 'Анкеты игроков'),
+            ],
+          ),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredGames.isEmpty
-                    ? const Center(child: Text('Нет доступных игр'))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _filteredGames.length,
-                        itemBuilder: (context, index) {
-                          final game = _filteredGames[index];
-                          final isPostponed = game['postponed'] != null && game['postponed'] != '';
-                          final isJoined = game['joined'] ?? false;
-                          final hasReferee = game['referee'] != null && game['referee']!.isNotEmpty;
-                          final cost = game['cost'] ?? 'Бесплатно';
-                          final level = game['level'] ?? 'Не указан';
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  title: Text(game['title'] ?? 'Любительская игра'),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('Дата: ${game['date']} ${game['time']}'),
-                                      Text('Место: ${game['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
-                                      if (game['address'] != null) Text('Адрес: ${game['address']}'),
-                                      Text('Стоимость: $cost'),
-                                      if (game['target_gender'] != null) Text('Пол: ${game['target_gender']}'),
-                                      if (game['target_age'] != null) Text('Возраст: ${game['target_age']}'),
-                                      Text('Уровень: $level'),
-                                      Text('Судья: ${hasReferee ? game['referee'] : 'нет'}'),
-                                      Text('Организатор: ${game['created_by_name'] ?? 'Неизвестен'}'),
-                                    ],
-                                  ),
-                                  trailing: isJoined
-                                      ? OutlinedButton(onPressed: () => _toggleJoin(game), style: OutlinedButton.styleFrom(foregroundColor: Colors.red), child: const Text('Отказаться'))
-                                      : ElevatedButton(onPressed: () => _toggleJoin(game), child: const Text('Записаться')),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildGamesTab(),
+                _buildApplicationsTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNavigationBar(role, fanWantsGames),
+    );
+  }
+
+  Widget _buildBottomNavigationBar(String role, bool fanWantsGames) {
+    List<BottomNavigationBarItem> items;
+    if (role == 'игрок') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'любитель') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'болельщик') {
+      if (fanWantsGames) {
+        items = const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      } else {
+        items = const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      }
+    } else if (role == 'admin') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'captain') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    }
+
+    final currentLocation = GoRouterState.of(context).uri.path;
+    int currentIndex = 0;
+    if (role == 'игрок') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/team') {
+        currentIndex = 1;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    } else if (role == 'любитель') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/game-search') {
+        currentIndex = 1;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    } else if (role == 'болельщик') {
+      if (fanWantsGames) {
+        if (currentLocation == '/home') {
+          currentIndex = 0;
+        } else if (currentLocation == '/game-search') {
+          currentIndex = 1;
+        } else if (currentLocation == '/schedule') {
+          currentIndex = 2;
+        } else if (currentLocation == '/teams-follow') {
+          currentIndex = 3;
+        } else if (currentLocation == '/profile') {
+          currentIndex = 4;
+        }
+      } else {
+        if (currentLocation == '/home') {
+          currentIndex = 0;
+        } else if (currentLocation == '/schedule') {
+          currentIndex = 1;
+        } else if (currentLocation == '/teams-follow') {
+          currentIndex = 2;
+        } else if (currentLocation == '/profile') {
+          currentIndex = 3;
+        }
+      }
+    } else if (role == 'admin') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 1;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 2;
+      }
+    } else if (role == 'captain') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 1;
+      } else if (currentLocation == '/team') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    }
+
+    return BottomNavigationBar(
+      currentIndex: currentIndex,
+      onTap: (index) => _onTabTapped(index, context, role, fanWantsGames),
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: Colors.purple,
+      unselectedItemColor: Colors.grey,
+      items: items,
+    );
+  }
+
+  void _onTabTapped(int index, BuildContext context, String role, bool fanWantsGames) {
+    switch (role) {
+      case 'игрок':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/team');
+        }
+        if (index == 2) {
+          context.go('/schedule');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+      case 'любитель':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/game-search');
+        }
+        if (index == 2) {
+          context.go('/schedule');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+      case 'болельщик':
+        if (fanWantsGames) {
+          if (index == 0) {
+            context.go('/home');
+          }
+          if (index == 1) {
+            context.go('/game-search');
+          }
+          if (index == 2) {
+            context.go('/schedule');
+          }
+          if (index == 3) {
+            context.go('/teams-follow');
+          }
+          if (index == 4) {
+            context.go('/profile');
+          }
+        } else {
+          if (index == 0) {
+            context.go('/home');
+          }
+          if (index == 1) {
+            context.go('/schedule');
+          }
+          if (index == 2) {
+            context.go('/teams-follow');
+          }
+          if (index == 3) {
+            context.go('/profile');
+          }
+        }
+        break;
+      case 'admin':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/schedule');
+        }
+        if (index == 2) {
+          context.go('/profile');
+        }
+        break;
+      case 'captain':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/schedule');
+        }
+        if (index == 2) {
+          context.go('/team');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+    }
+  }
+
+  Widget _buildGamesTab() {
+    return Column(
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              FilterChip(label: const Text('Зал'), selected: _filterSurface == 'зал', onSelected: (s) => setState(() => _filterSurface = s ? 'зал' : null)),
+              const SizedBox(width: 8),
+              FilterChip(label: const Text('Пляж'), selected: _filterSurface == 'пляж', onSelected: (s) => setState(() => _filterSurface = s ? 'пляж' : null)),
+              const SizedBox(width: 8),
+              FilterChip(label: const Text('Женская'), selected: _filterGender == 'женская', onSelected: (s) => setState(() => _filterGender = s ? 'женская' : null)),
+              const SizedBox(width: 8),
+              FilterChip(label: const Text('Мужская'), selected: _filterGender == 'мужская', onSelected: (s) => setState(() => _filterGender = s ? 'мужская' : null)),
+              const SizedBox(width: 8),
+              FilterChip(label: const Text('Смешанная'), selected: _filterGender == 'смешанная', onSelected: (s) => setState(() => _filterGender = s ? 'смешанная' : null)),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                hint: const Text('Возраст'),
+                value: _filterAge,
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('Все')),
+                  DropdownMenuItem(value: 'U18', child: Text('U18')),
+                  DropdownMenuItem(value: 'U21', child: Text('U21')),
+                  DropdownMenuItem(value: 'Open', child: Text('Open')),
+                ],
+                onChanged: (v) => setState(() => _filterAge = v),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                hint: const Text('Уровень'),
+                value: _filterLevel,
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('Все')),
+                  DropdownMenuItem(value: 'Любитель', child: Text('Любитель')),
+                  DropdownMenuItem(value: 'Продвинутый', child: Text('Продвинутый')),
+                  DropdownMenuItem(value: 'PRO', child: Text('PRO')),
+                ],
+                onChanged: (v) => setState(() => _filterLevel = v),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _isLoadingGames
+              ? const Center(child: CircularProgressIndicator())
+              : _filteredGames.isEmpty
+                  ? const Center(child: Text('Нет доступных игр'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: _filteredGames.length,
+                      itemBuilder: (context, index) {
+                        final g = _filteredGames[index];
+                        final isOwner = g['created_by'] == _currentUserId;
+                        final isJoined = g['isJoined'] == true;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            children: [
+                              ListTile(
+                                title: Text(g['title'] ?? 'Игра'),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('📅 ${g['date']} ${g['start_time']}'),
+                                    Text('📍 ${g['location']}'),
+                                    if (g['address'] != null) Text('🏠 ${g['address']}'),
+                                    Text('💰 Стоимость: ${g['cost'] ?? 'Бесплатно'}'),
+                                    if (g['target_gender'] != null) Text('👫 Пол: ${g['target_gender']}'),
+                                    if (g['target_age'] != null) Text('🎂 Возраст: ${g['target_age']}'),
+                                    Text('👨‍⚖️ Судья: ${g['referee'] ?? 'нет'}'),
+                                  ],
                                 ),
+                                trailing: isJoined
+                                    ? OutlinedButton(onPressed: () => _toggleJoin(g), style: OutlinedButton.styleFrom(foregroundColor: Colors.red), child: const Text('Отказаться'))
+                                    : ElevatedButton(onPressed: () => _toggleJoin(g), child: const Text('Записаться')),
+                              ),
+                              if (isOwner)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
                                       TextButton.icon(
-                                        onPressed: () => _showParticipantsList(game),
+                                        onPressed: () => _showInviteDialog(g),
+                                        icon: const Icon(Icons.person_add),
+                                        label: const Text('Пригласить'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      TextButton.icon(
+                                        onPressed: () => _showParticipantsList(g),
                                         icon: const Icon(Icons.people),
                                         label: const Text('Кто идёт?'),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildApplicationsTab() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _invitationService.getActiveApplications(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('Нет активных анкет'));
+        }
+        final applications = snapshot.data!;
+        return ListView.builder(
+          itemCount: applications.length,
+          itemBuilder: (context, index) {
+            final app = applications[index];
+            final player = app['profiles'] as Map<String, dynamic>?;
+            return Card(
+              margin: const EdgeInsets.all(8),
+              child: ListTile(
+                title: Text(player?['full_name'] ?? 'Игрок'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Позиция: ${app['position']}'),
+                    Text('Опыт: ${app['experience']}'),
+                    Text('Тип: ${app['game_type']}'),
+                  ],
+                ),
+                trailing: ElevatedButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Функция приглашения в разработке')),
+                    );
+                  },
+                  child: const Text('Пригласить'),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

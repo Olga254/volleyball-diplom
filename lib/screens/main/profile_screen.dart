@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
-import '../fan/fan_settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,33 +15,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _showSettings = false;
 
   @override
-  void initState() {
-    super.initState();
-    // Показываем диалог для болельщика после входа
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      if (auth.userProfile?['role'] == 'болельщик') {
-        FanSettingsScreen.showFirstTimeDialog(context);
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.userProfile;
     final role = user?['role'] ?? 'игрок';
-
-    String displayName;
-    if (user?['email'] == 'player@mock.com') {
-      displayName = 'Иван Петров';
-    } else if (user?['email'] == 'amateur@mock.com') {
-      displayName = 'Алексей Смирнов';
-    } else if (user?['email'] == 'fan@mock.com') {
-      displayName = 'Мария Иванова';
-    } else {
-      displayName = user?['full_name'] ?? 'Пользователь';
-    }
+    final fanWantsGames = authProvider.fanWantsGames;
+    final displayName = user?['full_name'] ?? 'Пользователь';
 
     return Scaffold(
       appBar: AppBar(
@@ -61,7 +39,227 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: _showSettings
           ? _buildSettingsView(authProvider, role, user)
           : _buildProfileView(displayName, user, role),
+      bottomNavigationBar: _buildBottomNavigationBar(role, fanWantsGames),
     );
+  }
+
+  Widget _buildBottomNavigationBar(String role, bool fanWantsGames) {
+    List<BottomNavigationBarItem> items;
+    if (role == 'игрок') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'любитель') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'болельщик') {
+      if (fanWantsGames) {
+        items = const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск игр'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      } else {
+        items = const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команды'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+        ];
+      }
+    } else if (role == 'admin') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else if (role == 'captain') {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Расписание'),
+        BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Команда'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    } else {
+      items = const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Новости'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+      ];
+    }
+
+    final currentLocation = GoRouterState.of(context).uri.path;
+    int currentIndex = 0;
+    if (role == 'игрок') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/team') {
+        currentIndex = 1;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    } else if (role == 'любитель') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/game-search') {
+        currentIndex = 1;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    } else if (role == 'болельщик') {
+      if (fanWantsGames) {
+        if (currentLocation == '/home') {
+          currentIndex = 0;
+        } else if (currentLocation == '/game-search') {
+          currentIndex = 1;
+        } else if (currentLocation == '/schedule') {
+          currentIndex = 2;
+        } else if (currentLocation == '/teams-follow') {
+          currentIndex = 3;
+        } else if (currentLocation == '/profile') {
+          currentIndex = 4;
+        }
+      } else {
+        if (currentLocation == '/home') {
+          currentIndex = 0;
+        } else if (currentLocation == '/schedule') {
+          currentIndex = 1;
+        } else if (currentLocation == '/teams-follow') {
+          currentIndex = 2;
+        } else if (currentLocation == '/profile') {
+          currentIndex = 3;
+        }
+      }
+    } else if (role == 'admin') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 1;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 2;
+      }
+    } else if (role == 'captain') {
+      if (currentLocation == '/home') {
+        currentIndex = 0;
+      } else if (currentLocation == '/schedule') {
+        currentIndex = 1;
+      } else if (currentLocation == '/team') {
+        currentIndex = 2;
+      } else if (currentLocation == '/profile') {
+        currentIndex = 3;
+      }
+    }
+
+    return BottomNavigationBar(
+      currentIndex: currentIndex,
+      onTap: (index) => _onTabTapped(index, context, role, fanWantsGames),
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: Colors.purple,
+      unselectedItemColor: Colors.grey,
+      items: items,
+    );
+  }
+
+  void _onTabTapped(int index, BuildContext context, String role, bool fanWantsGames) {
+    switch (role) {
+      case 'игрок':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/team');
+        }
+        if (index == 2) {
+          context.go('/schedule');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+      case 'любитель':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/game-search');
+        }
+        if (index == 2) {
+          context.go('/schedule');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+      case 'болельщик':
+        if (fanWantsGames) {
+          if (index == 0) {
+            context.go('/home');
+          }
+          if (index == 1) {
+            context.go('/game-search');
+          }
+          if (index == 2) {
+            context.go('/schedule');
+          }
+          if (index == 3) {
+            context.go('/teams-follow');
+          }
+          if (index == 4) {
+            context.go('/profile');
+          }
+        } else {
+          if (index == 0) {
+            context.go('/home');
+          }
+          if (index == 1) {
+            context.go('/schedule');
+          }
+          if (index == 2) {
+            context.go('/teams-follow');
+          }
+          if (index == 3) {
+            context.go('/profile');
+          }
+        }
+        break;
+      case 'admin':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/schedule');
+        }
+        if (index == 2) {
+          context.go('/profile');
+        }
+        break;
+      case 'captain':
+        if (index == 0) {
+          context.go('/home');
+        }
+        if (index == 1) {
+          context.go('/schedule');
+        }
+        if (index == 2) {
+          context.go('/team');
+        }
+        if (index == 3) {
+          context.go('/profile');
+        }
+        break;
+    }
   }
 
   Widget _buildProfileView(String displayName, Map<String, dynamic>? user, String role) {
@@ -82,17 +280,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Row(children: [Icon(Icons.notifications_active), SizedBox(width: 16), Text('Уведомления', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
-          ),
+          const Padding(padding: EdgeInsets.all(16), child: Row(children: [Icon(Icons.notifications_active), SizedBox(width: 16), Text('Уведомления', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))])),
           ListTile(
             leading: const Icon(Icons.notifications),
             title: const Text('Посмотреть все уведомления'),
             trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () => context.go('/notifications'),
+            onTap: () => context.push('/notifications'),
           ),
-          const SizedBox(height: 20),
         ],
       ),
     );
@@ -102,59 +296,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Row(children: [Icon(Icons.settings), SizedBox(width: 16), Text('Настройки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
-          ),
-          ListTile(
-            leading: const Icon(Icons.brightness_6),
-            title: const Text('Тема приложения'),
-            trailing: Switch(
-              value: Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark,
-              onChanged: (_) => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-            ),
-            onTap: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-          ),
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('Изменить имя'),
-            trailing: const Icon(Icons.edit),
-            onTap: () => _showEditNameDialog(context, authProvider),
-          ),
+          const Padding(padding: EdgeInsets.all(16), child: Row(children: [Icon(Icons.settings), SizedBox(width: 16), Text('Настройки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))])),
+          ListTile(leading: const Icon(Icons.brightness_6), title: const Text('Тема приложения'), trailing: Switch(value: Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark, onChanged: (_) => Provider.of<ThemeProvider>(context, listen: false).toggleTheme()), onTap: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme()),
+          ListTile(leading: const Icon(Icons.person), title: const Text('Изменить имя'), trailing: const Icon(Icons.edit), onTap: () => _showEditNameDialog(context, authProvider)),
           if (role == 'игрок' || role == 'любитель')
-            ListTile(
-              leading: const Icon(Icons.switch_account),
-              title: const Text('Сменить роль'),
-              subtitle: Text(role == 'игрок' ? 'Стать любителем' : 'Стать игроком'),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () => _changeRole(authProvider, role),
-            ),
+            ListTile(leading: const Icon(Icons.switch_account), title: const Text('Сменить роль'), subtitle: Text(role == 'игрок' ? 'Стать любителем' : 'Стать игроком'), trailing: const Icon(Icons.arrow_forward_ios), onTap: () => _changeRole(authProvider, role)),
           if (role == 'игрок')
-            ListTile(
-              leading: const Icon(Icons.sports_volleyball),
-              title: const Text('Изменить позицию'),
-              trailing: const Icon(Icons.edit),
-              onTap: () => _showEditPositionDialog(context, authProvider, user?['position'] ?? ''),
-            ),
-          ListTile(
-            leading: const Icon(Icons.phone),
-            title: const Text('Изменить телефон'),
-            trailing: const Icon(Icons.edit),
-            onTap: () => _showEditPhoneDialog(context, authProvider, user?['phone'] ?? ''),
-          ),
-          if (role == 'болельщик')
-            ListTile(
-              leading: const Icon(Icons.sports_volleyball),
-              title: const Text('Игры для себя'),
-              onTap: () => context.go('/fan-settings'),
-            ),
+            ListTile(leading: const Icon(Icons.sports_volleyball), title: const Text('Изменить позицию'), trailing: const Icon(Icons.edit), onTap: () => _showEditPositionDialog(context, authProvider, user?['position'] ?? '')),
+          ListTile(leading: const Icon(Icons.phone), title: const Text('Изменить телефон'), trailing: const Icon(Icons.edit), onTap: () => _showEditPhoneDialog(context, authProvider, user?['phone'] ?? '')),
           const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Выйти', style: TextStyle(color: Colors.red)),
-            onTap: _logout,
-          ),
-          const SizedBox(height: 20),
+          ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: const Text('Выйти', style: TextStyle(color: Colors.red)), onTap: _logout),
         ],
       ),
     );
@@ -251,13 +402,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await authProvider.updateRole(newRole);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Роль изменена на ${_capitalize(newRole)}')));
-      context.go('/home');
+      Navigator.pop(context);
     }
   }
 
   Future<void> _logout() async {
     await Provider.of<AuthProvider>(context, listen: false).signOut();
-    if (mounted) context.go('/authorization');
+    if (mounted) {
+      context.go('/authorization');
+    }
   }
 
   String _capitalize(String text) => text.isNotEmpty ? '${text[0].toUpperCase()}${text.substring(1)}' : text;
