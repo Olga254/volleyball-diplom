@@ -11,7 +11,7 @@ class ScheduleScreen extends StatefulWidget {
   State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProviderStateMixin {
+class _ScheduleScreenState extends State<ScheduleScreen> with TickerProviderStateMixin {
   late TabController _tabController;
   List<Map<String, dynamic>> _myGames = [];
   List<Map<String, dynamic>> _subscriptionGames = [];
@@ -21,6 +21,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 1, vsync: this);
     _loadGames();
   }
 
@@ -34,24 +35,32 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
     if (role == 'любитель') {
       _myGames = await _gameService.getMyGames(userId);
       _subscriptionGames = [];
+      _setupTabController(hasMyGames: _myGames.isNotEmpty, hasSubscriptions: false);
     } else if (role == 'болельщик') {
-      _myGames = await _gameService.getMyGames(userId);
+      _myGames = fanWantsGames ? await _gameService.getMyGames(userId) : [];
       _subscriptionGames = await _gameService.getGamesByUserSubscriptions(userId);
-      final hasMyGames = fanWantsGames && _myGames.isNotEmpty;
-      final hasSubscriptions = _subscriptionGames.isNotEmpty;
-      final tabCount = (hasMyGames ? 1 : 0) + (hasSubscriptions ? 1 : 0);
-      _tabController = TabController(length: tabCount > 0 ? tabCount : 1, vsync: this);
+      _setupTabController(hasMyGames: _myGames.isNotEmpty, hasSubscriptions: _subscriptionGames.isNotEmpty);
     } else if (role == 'игрок') {
       const teamId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
       _subscriptionGames = await _gameService.getGamesForTeam(teamId);
       _myGames = [];
-      _tabController = TabController(length: 1, vsync: this);
+      _setupTabController(hasMyGames: false, hasSubscriptions: _subscriptionGames.isNotEmpty);
     } else {
       _subscriptionGames = await _gameService.getAllGames();
       _myGames = [];
-      _tabController = TabController(length: 1, vsync: this);
+      _setupTabController(hasMyGames: false, hasSubscriptions: _subscriptionGames.isNotEmpty);
     }
+
     setState(() => _isLoading = false);
+  }
+
+  void _setupTabController({required bool hasMyGames, required bool hasSubscriptions}) {
+    final length = (hasMyGames ? 1 : 0) + (hasSubscriptions ? 1 : 0);
+    final newLength = length > 0 ? length : 1;
+    if (_tabController.length != newLength) {
+      _tabController.dispose();
+      _tabController = TabController(length: newLength, vsync: this);
+    }
   }
 
   @override
@@ -70,8 +79,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
     if (_isLoading) {
       body = const Center(child: CircularProgressIndicator());
     } else {
-      final hasMyGames = (role == 'любитель' && _myGames.isNotEmpty) || (role == 'болельщик' && fanWantsGames && _myGames.isNotEmpty);
-      final hasSubscriptions = (role == 'болельщик' && _subscriptionGames.isNotEmpty) || (role == 'игрок' && _subscriptionGames.isNotEmpty);
+      final hasMyGames = (role == 'любитель' && _myGames.isNotEmpty) ||
+          (role == 'болельщик' && fanWantsGames && _myGames.isNotEmpty);
+      final hasSubscriptions = (role == 'болельщик' && _subscriptionGames.isNotEmpty) ||
+          (role == 'игрок' && _subscriptionGames.isNotEmpty) ||
+          ((role == 'admin' || role == 'captain') && _subscriptionGames.isNotEmpty);
 
       if (role == 'любитель' && _myGames.isEmpty) {
         body = const Center(child: Text('Вы ещё не записаны ни на одну игру'));
@@ -81,15 +93,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
         List<Widget> tabs = [];
         List<Widget> tabViews = [];
         if (hasMyGames) {
-          tabs.add(const Tab(text: 'Мои игры'));
+          tabs.add(const Tab(text: 'Игры для себя'));
           tabViews.add(_buildGamesList(_myGames, isMyGames: true));
         }
         if (hasSubscriptions) {
-          tabs.add(Tab(text: role == 'игрок' ? 'Игры команды' : 'Подписки'));
+          String label;
+          if (role == 'игрок') {
+            label = 'Игры команды';
+          } else if (role == 'болельщик') {
+            label = 'Подписки';
+          } else {
+            label = 'Все игры';
+          }
+          tabs.add(Tab(text: label));
           tabViews.add(_buildGamesList(_subscriptionGames, isMyGames: false));
         }
-
-        if (tabs.length == 1) {
+        if (tabs.isEmpty) {
+          body = const Center(child: Text('Нет игр'));
+        } else if (tabs.length == 1) {
           body = tabViews.first;
         } else {
           body = Column(
@@ -105,7 +126,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
     return Scaffold(
       appBar: AppBar(title: const Text('Расписание')),
       body: body,
-      bottomNavigationBar: _buildBottomNavigationBar(role, fanWantsGames),
+      bottomNavigationBar: _buildBottomNavigationBar(role ?? 'игрок', fanWantsGames),
     );
   }
 
@@ -345,8 +366,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('📅 ${g['date']} ${g['start_time']}'),
-                Text('📍 ${g['location']}', style: TextStyle(color: isPostponed ? Colors.red : null)),
+                Text('📅 ${g['date'] ?? 'Дата не указана'} ${g['start_time'] ?? ''}'),
+                Text('📍 ${g['location'] ?? ''}', style: TextStyle(color: isPostponed ? Colors.red : null)),
                 Text('👨‍⚖️ Судья: ${g['referee'] ?? 'не назначен'}'),
                 if (isPostponed) Text('⚠️ Перенос: ${g['postponed']}', style: const TextStyle(color: Colors.red)),
               ],
@@ -368,8 +389,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> with SingleTickerProvid
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Дата: ${game['date']} ${game['start_time']}'),
-            Text('Место: ${game['location']}'),
+            Text('Дата: ${game['date'] ?? ''} ${game['start_time'] ?? ''}'),
+            Text('Место: ${game['location'] ?? ''}'),
             if (game['address'] != null) Text('Адрес: ${game['address']}'),
             Text('Счёт: ${game['score'] ?? 'не указан'}'),
             if (game['postponed'] != null) Text('Перенос: ${game['postponed']}', style: const TextStyle(color: Colors.red)),

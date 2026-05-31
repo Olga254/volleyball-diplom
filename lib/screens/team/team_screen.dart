@@ -46,12 +46,7 @@ class _TeamScreenState extends State<TeamScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () async {
-              final result = await context.push('/team/add-player');
-              if (result == true) {
-                _loadTeamMembers();
-              }
-            },
+            onPressed: () => context.push('/team/add-player').then((_) => _loadTeamMembers()),
           ),
         ],
       ),
@@ -69,19 +64,16 @@ class _TeamScreenState extends State<TeamScreen> {
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Colors.blue[100],
-                          child: Text(
-                            p['number']?.toString() ?? '?',
-                            style: const TextStyle(color: Colors.blue),
-                          ),
+                          child: Text(p['number']?.toString() ?? '?', style: const TextStyle(color: Colors.blue)),
                         ),
                         title: Text(p['full_name'] ?? 'Без имени'),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Позиция: ${p['position'] ?? '---'}'),
-                            Text('Телефон: ${p['phone'] ?? '---'}'),
-                            Text('Email: ${p['email'] ?? '---'}'),
-                            Text('Дата рождения: ${p['birth_date'] ?? '---'}'),
+                            Text('Позиция: ${p['position'] ?? '—'}'),
+                            Text('Телефон: ${p['phone'] ?? '—'}'),
+                            Text('Email: ${p['email'] ?? '—'}'),
+                            Text('Дата рождения: ${p['birth_date'] ?? '—'}'),
                           ],
                         ),
                         trailing: Row(
@@ -325,90 +317,72 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   void _editPlayer(Map<String, dynamic> player) {
-    final nameCtrl = TextEditingController(text: player['full_name'] ?? '');
-    final phoneCtrl = TextEditingController(text: player['phone'] ?? '');
+    final nameCtrl = TextEditingController(text: player['full_name']);
+    final phoneCtrl = TextEditingController(text: player['phone']);
+    final positionCtrl = TextEditingController(text: player['position']);
     final numberCtrl = TextEditingController(text: (player['number'] ?? '').toString());
-    final emailCtrl = TextEditingController(text: player['email'] ?? '');
+    final emailCtrl = TextEditingController(text: player['email']);
     final birthDateCtrl = TextEditingController(text: player['birth_date'] ?? '');
-
     final positions = ['Связующий', 'Защитник', 'Либеро', 'Диагональный', 'Доигровщик'];
-    String? selectedPosition = player['position'];
-    if (!positions.contains(selectedPosition)) {
-      selectedPosition = null;
-    }
 
     showDialog(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('Редактировать игрока'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ФИО')),
-                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Телефон'), keyboardType: TextInputType.phone),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedPosition,
-                  items: positions.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                  onChanged: (v) => setStateDialog(() => selectedPosition = v),
-                  decoration: const InputDecoration(labelText: 'Позиция'),
-                ),
-                TextField(controller: numberCtrl, decoration: const InputDecoration(labelText: 'Номер'), keyboardType: TextInputType.number),
-                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email'), enabled: false),
-                TextField(
-                  controller: birthDateCtrl,
-                  decoration: const InputDecoration(labelText: 'Дата рождения'),
-                  readOnly: true,
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: dialogContext,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime(1900),
-                      lastDate: DateTime.now(),
-                    );
-                    if (date != null) {
-                      setStateDialog(() {
-                        birthDateCtrl.text = date.toIso8601String().split('T')[0];
-                      });
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
-            ElevatedButton(
-              onPressed: () async {
-                // Закрываем диалог
-                if (dialogContext.mounted) {
-                  Navigator.pop(dialogContext);
-                }
-                // Выполняем обновление данных
-                await _teamService.updatePlayerInTeam(
-                  userId: player['user_id'],
-                  fullName: nameCtrl.text,
-                  phone: phoneCtrl.text,
-                  position: selectedPosition ?? '',
-                  number: int.tryParse(numberCtrl.text) ?? 0,
-                  birthDate: birthDateCtrl.text,
-                );
-                // Обновляем список игроков
-                await _loadTeamMembers();
-                // Показываем уведомление в следующем кадре, чтобы избежать предупреждения анализатора
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Игрок отредактирован')),
-                    );
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Редактировать игрока'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'ФИО')),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Телефон'), keyboardType: TextInputType.phone),
+              DropdownButtonFormField<String>(
+                initialValue: player['position'],
+                items: positions.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                onChanged: (v) => positionCtrl.text = v ?? '',
+                decoration: const InputDecoration(labelText: 'Позиция'),
+              ),
+              TextField(controller: numberCtrl, decoration: const InputDecoration(labelText: 'Номер'), keyboardType: TextInputType.number),
+              TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email'), enabled: false),
+              TextField(
+                controller: birthDateCtrl,
+                decoration: const InputDecoration(labelText: 'Дата рождения'),
+                readOnly: true,
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: dialogContext,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(1900),
+                    lastDate: DateTime.now(),
+                  );
+                  if (date != null) {
+                    birthDateCtrl.text = date.toIso8601String().split('T')[0];
                   }
-                });
-              },
-              child: const Text('Сохранить'),
-            ),
-          ],
+                },
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () async {
+              await _teamService.updatePlayerInTeam(
+                userId: player['user_id'],
+                fullName: nameCtrl.text,
+                phone: phoneCtrl.text,
+                position: positionCtrl.text,
+                number: int.tryParse(numberCtrl.text) ?? 0,
+                birthDate: birthDateCtrl.text,
+              );
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              await _loadTeamMembers();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Данные обновлены')));
+              }
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
       ),
     );
   }
@@ -429,13 +403,7 @@ class _TeamScreenState extends State<TeamScreen> {
       await _teamService.removePlayerFromTeam(_teamId, userId);
       await _loadTeamMembers();
       if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Игрок удалён')),
-            );
-          }
-        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Игрок удалён')));
       }
     }
   }

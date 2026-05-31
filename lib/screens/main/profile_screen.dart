@@ -99,67 +99,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final currentLocation = GoRouterState.of(context).uri.path;
     int currentIndex = 0;
     if (role == 'игрок') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/team') {
-        currentIndex = 1;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 2;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 3;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/team') { currentIndex = 1; }
+      else if (currentLocation == '/schedule') { currentIndex = 2; }
+      else if (currentLocation == '/profile') { currentIndex = 3; }
     } else if (role == 'любитель') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/game-search') {
-        currentIndex = 1;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 2;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 3;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/game-search') { currentIndex = 1; }
+      else if (currentLocation == '/schedule') { currentIndex = 2; }
+      else if (currentLocation == '/profile') { currentIndex = 3; }
     } else if (role == 'болельщик') {
       if (fanWantsGames) {
-        if (currentLocation == '/home') {
-          currentIndex = 0;
-        } else if (currentLocation == '/game-search') {
-          currentIndex = 1;
-        } else if (currentLocation == '/schedule') {
-          currentIndex = 2;
-        } else if (currentLocation == '/teams-follow') {
-          currentIndex = 3;
-        } else if (currentLocation == '/profile') {
-          currentIndex = 4;
-        }
+        if (currentLocation == '/home') { currentIndex = 0; }
+        else if (currentLocation == '/game-search') { currentIndex = 1; }
+        else if (currentLocation == '/schedule') { currentIndex = 2; }
+        else if (currentLocation == '/teams-follow') { currentIndex = 3; }
+        else if (currentLocation == '/profile') { currentIndex = 4; }
       } else {
-        if (currentLocation == '/home') {
-          currentIndex = 0;
-        } else if (currentLocation == '/schedule') {
-          currentIndex = 1;
-        } else if (currentLocation == '/teams-follow') {
-          currentIndex = 2;
-        } else if (currentLocation == '/profile') {
-          currentIndex = 3;
-        }
+        if (currentLocation == '/home') { currentIndex = 0; }
+        else if (currentLocation == '/schedule') { currentIndex = 1; }
+        else if (currentLocation == '/teams-follow') { currentIndex = 2; }
+        else if (currentLocation == '/profile') { currentIndex = 3; }
       }
     } else if (role == 'admin') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 1;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 2;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/schedule') { currentIndex = 1; }
+      else if (currentLocation == '/profile') { currentIndex = 2; }
     } else if (role == 'captain') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 1;
-      } else if (currentLocation == '/team') {
-        currentIndex = 2;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 3;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/schedule') { currentIndex = 1; }
+      else if (currentLocation == '/team') { currentIndex = 2; }
+      else if (currentLocation == '/profile') { currentIndex = 3; }
     }
 
     return BottomNavigationBar(
@@ -175,89 +145,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _onTabTapped(int index, BuildContext context, String role, bool fanWantsGames) {
     switch (role) {
       case 'игрок':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/team');
-        }
-        if (index == 2) {
-          context.go('/schedule');
-        }
-        if (index == 3) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/team'); }
+        if (index == 2) { context.go('/schedule'); }
+        if (index == 3) { context.go('/profile'); }
         break;
       case 'любитель':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/game-search');
-        }
-        if (index == 2) {
-          context.go('/schedule');
-        }
-        if (index == 3) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/game-search'); }
+        if (index == 2) { context.go('/schedule'); }
+        if (index == 3) { context.go('/profile'); }
         break;
       case 'болельщик':
         if (fanWantsGames) {
-          if (index == 0) {
-            context.go('/home');
-          }
-          if (index == 1) {
-            context.go('/game-search');
-          }
-          if (index == 2) {
-            context.go('/schedule');
-          }
-          if (index == 3) {
-            context.go('/teams-follow');
-          }
-          if (index == 4) {
-            context.go('/profile');
-          }
+          if (index == 0) { context.go('/home'); }
+          if (index == 1) { context.go('/game-search'); }
+          if (index == 2) { context.go('/schedule'); }
+          if (index == 3) { context.go('/teams-follow'); }
+          if (index == 4) { context.go('/profile'); }
         } else {
-          if (index == 0) {
-            context.go('/home');
-          }
-          if (index == 1) {
-            context.go('/schedule');
-          }
-          if (index == 2) {
-            context.go('/teams-follow');
-          }
-          if (index == 3) {
-            context.go('/profile');
-          }
+          if (index == 0) { context.go('/home'); }
+          if (index == 1) { context.go('/schedule'); }
+          if (index == 2) { context.go('/teams-follow'); }
+          if (index == 3) { context.go('/profile'); }
         }
         break;
       case 'admin':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/schedule');
-        }
-        if (index == 2) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/schedule'); }
+        if (index == 2) { context.go('/profile'); }
         break;
       case 'captain':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/schedule');
-        }
-        if (index == 2) {
-          context.go('/team');
-        }
-        if (index == 3) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/schedule'); }
+        if (index == 2) { context.go('/team'); }
+        if (index == 3) { context.go('/profile'); }
         break;
     }
   }
@@ -299,11 +221,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Padding(padding: EdgeInsets.all(16), child: Row(children: [Icon(Icons.settings), SizedBox(width: 16), Text('Настройки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))])),
           ListTile(leading: const Icon(Icons.brightness_6), title: const Text('Тема приложения'), trailing: Switch(value: Provider.of<ThemeProvider>(context).themeMode == ThemeMode.dark, onChanged: (_) => Provider.of<ThemeProvider>(context, listen: false).toggleTheme()), onTap: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme()),
           ListTile(leading: const Icon(Icons.person), title: const Text('Изменить имя'), trailing: const Icon(Icons.edit), onTap: () => _showEditNameDialog(context, authProvider)),
-          if (role == 'игрок' || role == 'любитель')
-            ListTile(leading: const Icon(Icons.switch_account), title: const Text('Сменить роль'), subtitle: Text(role == 'игрок' ? 'Стать любителем' : 'Стать игроком'), trailing: const Icon(Icons.arrow_forward_ios), onTap: () => _changeRole(authProvider, role)),
+          ListTile(leading: const Icon(Icons.phone), title: const Text('Изменить телефон'), trailing: const Icon(Icons.edit), onTap: () => _showEditPhoneDialog(context, authProvider, user?['phone'] ?? '')),
           if (role == 'игрок')
             ListTile(leading: const Icon(Icons.sports_volleyball), title: const Text('Изменить позицию'), trailing: const Icon(Icons.edit), onTap: () => _showEditPositionDialog(context, authProvider, user?['position'] ?? '')),
-          ListTile(leading: const Icon(Icons.phone), title: const Text('Изменить телефон'), trailing: const Icon(Icons.edit), onTap: () => _showEditPhoneDialog(context, authProvider, user?['phone'] ?? '')),
+          if (role == 'болельщик')
+            ListTile(
+              leading: const Icon(Icons.sports_volleyball),
+              title: const Text('Настройки "Игры для себя"'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () => context.push('/fan-settings'),
+            ),
           const Divider(),
           ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: const Text('Выйти', style: TextStyle(color: Colors.red)), onTap: _logout),
         ],
@@ -395,15 +322,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _changeRole(AuthProvider authProvider, String currentRole) async {
-    final newRole = currentRole == 'игрок' ? 'любитель' : 'игрок';
-    await authProvider.updateRole(newRole);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Роль изменена на ${_capitalize(newRole)}')));
-      Navigator.pop(context);
-    }
   }
 
   Future<void> _logout() async {

@@ -58,7 +58,7 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
                           Text('Город: ${_team?['city'] ?? '—'}'),
                           Text('Адрес зала: ${_team?['address'] ?? '—'}'),
                           Text('Тренер: ${_extractCoach(_team?['description'])}'),
-                          Text('Капитан: ${_getCaptainName()}'),
+                          Text('Капитан: ${_getCaptainName() ?? '—'}'),
                         ],
                       ),
                     ),
@@ -77,8 +77,8 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         child: ListTile(
                           leading: CircleAvatar(child: Text(p['number']?.toString() ?? '?')),
-                          title: Text(p['full_name']),
-                          subtitle: Text('Позиция: ${p['position']}'),
+                          title: Text(p['full_name'] ?? 'Без имени'),
+                          subtitle: Text('Позиция: ${p['position'] ?? '—'}'),
                         ),
                       );
                     },
@@ -94,7 +94,7 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
                     itemBuilder: (context, index) {
                       final g = _games[index];
                       final isPostponed = g['postponed'] != null && g['postponed'] != '';
-                      final isPast = DateTime.parse(g['date']).isBefore(DateTime.now());
+                      final isPast = DateTime.parse(g['date'] ?? '2000-01-01').isBefore(DateTime.now());
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         child: ListTile(
@@ -102,8 +102,8 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Дата: ${g['date']} ${g['start_time']}'),
-                              Text('Место: ${g['location']}'),
+                              Text('Дата: ${g['date'] ?? ''} ${g['start_time'] ?? ''}'),
+                              Text('Место: ${g['location'] ?? ''}'),
                               if (g['score'] != null) Text('Счёт: ${g['score']}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               if (isPostponed) Text('Перенос: ${g['postponed']}', style: const TextStyle(color: Colors.red)),
                             ],
@@ -130,8 +130,8 @@ class _TeamProfileScreenState extends State<TeamProfileScreen> {
     return '—';
   }
 
-  String _getCaptainName() {
+  String? _getCaptainName() {
     final captain = _players.firstWhere((p) => p['role_in_team'] == 'капитан', orElse: () => {});
-    return captain['full_name'] ?? '—';
+    return captain['full_name'];
   }
 }

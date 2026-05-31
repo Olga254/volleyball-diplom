@@ -26,7 +26,7 @@ class _FanSettingsScreenState extends State<FanSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Игры для себя'), leading: const BackButton()),
+      appBar: AppBar(title: const Text('Настройки болельщика'), leading: const BackButton()),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -65,7 +65,12 @@ class _FanSettingsScreenState extends State<FanSettingsScreen> {
       await auth.updateFanSettings(_playsSelf, _wantsGames);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Настройки сохранены')));
-        context.pop();
+        // Безопасный выход: если можно pop, то pop, иначе go назад
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        } else {
+          context.go('/profile');
+        }
       }
     } catch (e) {
       if (mounted) {

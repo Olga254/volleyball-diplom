@@ -13,6 +13,7 @@ class CaptainPanelScreen extends StatefulWidget {
 class _CaptainPanelScreenState extends State<CaptainPanelScreen> {
   final GameService _gameService = GameService();
   final TeamService _teamService = TeamService();
+
   List<Map<String, dynamic>> _otherTeams = [];
   List<Map<String, dynamic>> _myTeamPlayers = [];
   List<Map<String, dynamic>> _myTeamGames = [];
@@ -27,7 +28,6 @@ class _CaptainPanelScreenState extends State<CaptainPanelScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 500));
     _otherTeams = await _gameService.getAllTeams();
     _myTeamId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     _myTeamPlayers = await _teamService.getTeamMembers(_myTeamId!);

@@ -21,7 +21,6 @@ class _AddPlayerScreenState extends State<AddPlayerScreen> {
   final _experienceController = TextEditingController();
   final _birthDateController = TextEditingController();
   bool _isLoading = false;
-
   final TeamService _teamService = TeamService();
   static const String _teamId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   final List<String> _positions = ['Связующий', 'Защитник', 'Либеро', 'Диагональный', 'Доигровщик'];
@@ -64,7 +63,6 @@ class _AddPlayerScreenState extends State<AddPlayerScreen> {
               TextFormField(controller: _fullNameController, decoration: const InputDecoration(labelText: 'ФИО'), validator: (v) => v!.isEmpty ? 'Введите ФИО' : null),
               TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Телефон'), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? 'Введите телефон' : null),
               DropdownButtonFormField<String>(
-                initialValue: null,
                 items: _positions.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
                 onChanged: (v) => _positionController.text = v ?? '',
                 decoration: const InputDecoration(labelText: 'Позиция'),
@@ -112,6 +110,7 @@ class _AddPlayerScreenState extends State<AddPlayerScreen> {
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Игрок добавлен')));
+          // Возвращаем true, чтобы на предыдущем экране обновился список
           Navigator.pop(context, true);
         }
       } catch (e) {

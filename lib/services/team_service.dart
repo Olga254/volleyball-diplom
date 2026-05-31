@@ -3,6 +3,7 @@ import 'supabase_service.dart';
 
 class TeamService {
   final SupabaseService _supabase = SupabaseService();
+
   static final TeamService _instance = TeamService._internal();
   factory TeamService() => _instance;
   TeamService._internal();
@@ -17,14 +18,14 @@ class TeamService {
         final profile = member['profiles'] as Map<String, dynamic>? ?? {};
         return {
           'user_id': member['user_id'],
-          'full_name': profile['full_name'],
-          'phone': profile['phone'],
-          'email': profile['email'],
-          'position': profile['position'],
+          'full_name': profile['full_name'] ?? '',
+          'phone': profile['phone'] ?? '',
+          'email': profile['email'] ?? '',
+          'position': profile['position'] ?? '',
           'number': profile['number'],
-          'experience': profile['experience'],
-          'birth_date': profile['birth_date'],
-          'role_in_team': member['role_in_team'],
+          'experience': profile['experience'] ?? '',
+          'birth_date': profile['birth_date'] ?? '',
+          'role_in_team': member['role_in_team'] ?? 'игрок',
         };
       }).toList();
     } catch (e) {
@@ -46,28 +47,17 @@ class TeamService {
     required String createdBy,
   }) async {
     try {
-      final userId = await _supabase.client.rpc(
-        'create_user_and_profile',
-        params: {
-          'p_email': email,
-          'p_password': password,
-          'p_full_name': fullName,
-          'p_phone': phone,
-          'p_position': position,
-        },
-      );
-      await _supabase.client
-          .from('profiles')
-          .update({
-            'experience': experience,
-            'number': number,
-            'birth_date': birthDate,
-          })
-          .eq('id', userId);
-      await _supabase.client.from('team_members').insert({
-        'team_id': teamId,
-        'user_id': userId,
-        'role_in_team': 'игрок',
+      await _supabase.client.rpc('add_player_to_team', params: {
+        'p_team_id': teamId,
+        'p_email': email,
+        'p_password': password,
+        'p_full_name': fullName,
+        'p_phone': phone,
+        'p_position': position,
+        'p_number': number,
+        'p_experience': experience,
+        'p_birth_date': birthDate,
+        'p_created_by': createdBy,
       });
     } catch (e) {
       debugPrint('Ошибка добавления игрока: $e');

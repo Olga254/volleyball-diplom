@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/game_service.dart';
 import '../../services/invitation_service.dart';
+import '../amateur/game_details_screen.dart';
 
 class GameSearchScreen extends StatefulWidget {
   const GameSearchScreen({super.key});
@@ -19,7 +20,6 @@ class _GameSearchScreenState extends State<GameSearchScreen> with SingleTickerPr
   final GameService _gameService = GameService();
   final InvitationService _invitationService = InvitationService();
   String? _currentUserId;
-
   String? _filterSurface;
   String? _filterGender;
   String? _filterAge;
@@ -46,127 +46,51 @@ class _GameSearchScreenState extends State<GameSearchScreen> with SingleTickerPr
   Future<void> _loadGames() async {
     setState(() => _isLoadingGames = true);
     final allGames = await _gameService.getAllGamesForSearch();
+    final myGames = await _gameService.getMyGames(_currentUserId);
+    final myGameIds = myGames.map((g) => g['id'] as String).toList();
+    for (var game in allGames) {
+      game['isJoined'] = myGameIds.contains(game['id']);
+    }
     _games = allGames;
     setState(() => _isLoadingGames = false);
   }
 
   List<Map<String, dynamic>> get _filteredGames {
     return _games.where((game) {
-      if (_filterSurface != null && game['surface'] != _filterSurface) {
-        return false;
-      }
-      if (_filterGender != null && game['target_gender'] != _filterGender) {
-        return false;
-      }
-      if (_filterAge != null && game['target_age'] != _filterAge) {
-        return false;
-      }
-      if (_filterLevel != null && game['level'] != _filterLevel) {
-        return false;
-      }
+      if (_filterSurface != null && game['surface'] != _filterSurface) return false;
+      if (_filterGender != null && game['target_gender'] != _filterGender) return false;
+      if (_filterAge != null && game['target_age'] != _filterAge) return false;
+      if (_filterLevel != null && game['level'] != _filterLevel) return false;
       return true;
     }).toList();
   }
 
-  void _toggleJoin(Map<String, dynamic> game) {
-    setState(() {
-      if (game['isJoined'] == true) {
-        _gameService.leaveGame(game['id']);
-        game['isJoined'] = false;
+  Future<void> _toggleJoin(Map<String, dynamic> game) async {
+    final newState = !(game['isJoined'] as bool);
+    setState(() => game['isJoined'] = newState);
+    try {
+      if (newState) {
+        await _gameService.joinGame(game['id'] as String);
       } else {
-        _gameService.joinGame(game['id']);
-        game['isJoined'] = true;
+        await _gameService.leaveGame(game['id'] as String);
       }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(game['isJoined'] ? 'Вы записаны на игру' : 'Вы отказались')));
-  }
-
-  Future<void> _showInviteDialog(Map<String, dynamic> game) async {
-    final emailController = TextEditingController();
-    Map<String, dynamic>? foundUser;
-    final scaffoldContext = context;
-    await showDialog(
-      context: scaffoldContext,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('Пригласить игрока'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(labelText: 'Email приглашаемого'),
-                onChanged: (value) async {
-                  if (value.length > 3) {
-                    final user = await _invitationService.findUserByEmail(value);
-                    if (user != null) {
-                      setStateDialog(() => foundUser = user);
-                    }
-                  }
-                },
-              ),
-              if (foundUser != null)
-                ListTile(
-                  title: Text(foundUser!['full_name']),
-                  subtitle: Text(foundUser!['email']),
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
-            ElevatedButton(
-              onPressed: () async {
-                if (foundUser != null) {
-                  await _invitationService.inviteToGame(
-                    gameId: game['id'],
-                    inviterId: _currentUserId!,
-                    inviteeId: foundUser!['id'],
-                  );
-                  if (dialogContext.mounted) {
-                    Navigator.pop(dialogContext);
-                  }
-                  if (scaffoldContext.mounted) {
-                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(const SnackBar(content: Text('Приглашение отправлено')));
-                  }
-                }
-              },
-              child: const Text('Пригласить'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showParticipantsList(Map<String, dynamic> game) async {
-    final participants = await _invitationService.getAcceptedParticipants(game['id']);
-    if (!mounted) {
-      return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(newState ? 'Вы записаны на игру' : 'Вы отказались')),
+        );
+      }
+    } catch (e) {
+      setState(() => game['isJoined'] = !newState);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+      }
     }
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Приглашённые игроки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            if (participants.isEmpty)
-              const Text('Нет принявших приглашение')
-            else
-              ...participants.map((p) => ListTile(title: Text(p['full_name']), leading: const Icon(Icons.person))),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    final role = auth.userProfile?['role'];
+    final role = auth.userProfile?['role'] ?? 'игрок';
     final fanWantsGames = auth.fanWantsGames;
     final canCreateGame = (role == 'любитель') || (role == 'admin');
 
@@ -276,67 +200,37 @@ class _GameSearchScreenState extends State<GameSearchScreen> with SingleTickerPr
     final currentLocation = GoRouterState.of(context).uri.path;
     int currentIndex = 0;
     if (role == 'игрок') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/team') {
-        currentIndex = 1;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 2;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 3;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/team') { currentIndex = 1; }
+      else if (currentLocation == '/schedule') { currentIndex = 2; }
+      else if (currentLocation == '/profile') { currentIndex = 3; }
     } else if (role == 'любитель') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/game-search') {
-        currentIndex = 1;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 2;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 3;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/game-search') { currentIndex = 1; }
+      else if (currentLocation == '/schedule') { currentIndex = 2; }
+      else if (currentLocation == '/profile') { currentIndex = 3; }
     } else if (role == 'болельщик') {
       if (fanWantsGames) {
-        if (currentLocation == '/home') {
-          currentIndex = 0;
-        } else if (currentLocation == '/game-search') {
-          currentIndex = 1;
-        } else if (currentLocation == '/schedule') {
-          currentIndex = 2;
-        } else if (currentLocation == '/teams-follow') {
-          currentIndex = 3;
-        } else if (currentLocation == '/profile') {
-          currentIndex = 4;
-        }
+        if (currentLocation == '/home') { currentIndex = 0; }
+        else if (currentLocation == '/game-search') { currentIndex = 1; }
+        else if (currentLocation == '/schedule') { currentIndex = 2; }
+        else if (currentLocation == '/teams-follow') { currentIndex = 3; }
+        else if (currentLocation == '/profile') { currentIndex = 4; }
       } else {
-        if (currentLocation == '/home') {
-          currentIndex = 0;
-        } else if (currentLocation == '/schedule') {
-          currentIndex = 1;
-        } else if (currentLocation == '/teams-follow') {
-          currentIndex = 2;
-        } else if (currentLocation == '/profile') {
-          currentIndex = 3;
-        }
+        if (currentLocation == '/home') { currentIndex = 0; }
+        else if (currentLocation == '/schedule') { currentIndex = 1; }
+        else if (currentLocation == '/teams-follow') { currentIndex = 2; }
+        else if (currentLocation == '/profile') { currentIndex = 3; }
       }
     } else if (role == 'admin') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 1;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 2;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/schedule') { currentIndex = 1; }
+      else if (currentLocation == '/profile') { currentIndex = 2; }
     } else if (role == 'captain') {
-      if (currentLocation == '/home') {
-        currentIndex = 0;
-      } else if (currentLocation == '/schedule') {
-        currentIndex = 1;
-      } else if (currentLocation == '/team') {
-        currentIndex = 2;
-      } else if (currentLocation == '/profile') {
-        currentIndex = 3;
-      }
+      if (currentLocation == '/home') { currentIndex = 0; }
+      else if (currentLocation == '/schedule') { currentIndex = 1; }
+      else if (currentLocation == '/team') { currentIndex = 2; }
+      else if (currentLocation == '/profile') { currentIndex = 3; }
     }
 
     return BottomNavigationBar(
@@ -352,89 +246,41 @@ class _GameSearchScreenState extends State<GameSearchScreen> with SingleTickerPr
   void _onTabTapped(int index, BuildContext context, String role, bool fanWantsGames) {
     switch (role) {
       case 'игрок':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/team');
-        }
-        if (index == 2) {
-          context.go('/schedule');
-        }
-        if (index == 3) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/team'); }
+        if (index == 2) { context.go('/schedule'); }
+        if (index == 3) { context.go('/profile'); }
         break;
       case 'любитель':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/game-search');
-        }
-        if (index == 2) {
-          context.go('/schedule');
-        }
-        if (index == 3) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/game-search'); }
+        if (index == 2) { context.go('/schedule'); }
+        if (index == 3) { context.go('/profile'); }
         break;
       case 'болельщик':
         if (fanWantsGames) {
-          if (index == 0) {
-            context.go('/home');
-          }
-          if (index == 1) {
-            context.go('/game-search');
-          }
-          if (index == 2) {
-            context.go('/schedule');
-          }
-          if (index == 3) {
-            context.go('/teams-follow');
-          }
-          if (index == 4) {
-            context.go('/profile');
-          }
+          if (index == 0) { context.go('/home'); }
+          if (index == 1) { context.go('/game-search'); }
+          if (index == 2) { context.go('/schedule'); }
+          if (index == 3) { context.go('/teams-follow'); }
+          if (index == 4) { context.go('/profile'); }
         } else {
-          if (index == 0) {
-            context.go('/home');
-          }
-          if (index == 1) {
-            context.go('/schedule');
-          }
-          if (index == 2) {
-            context.go('/teams-follow');
-          }
-          if (index == 3) {
-            context.go('/profile');
-          }
+          if (index == 0) { context.go('/home'); }
+          if (index == 1) { context.go('/schedule'); }
+          if (index == 2) { context.go('/teams-follow'); }
+          if (index == 3) { context.go('/profile'); }
         }
         break;
       case 'admin':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/schedule');
-        }
-        if (index == 2) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/schedule'); }
+        if (index == 2) { context.go('/profile'); }
         break;
       case 'captain':
-        if (index == 0) {
-          context.go('/home');
-        }
-        if (index == 1) {
-          context.go('/schedule');
-        }
-        if (index == 2) {
-          context.go('/team');
-        }
-        if (index == 3) {
-          context.go('/profile');
-        }
+        if (index == 0) { context.go('/home'); }
+        if (index == 1) { context.go('/schedule'); }
+        if (index == 2) { context.go('/team'); }
+        if (index == 3) { context.go('/profile'); }
         break;
     }
   }
@@ -493,51 +339,43 @@ class _GameSearchScreenState extends State<GameSearchScreen> with SingleTickerPr
                       itemCount: _filteredGames.length,
                       itemBuilder: (context, index) {
                         final g = _filteredGames[index];
-                        final isOwner = g['created_by'] == _currentUserId;
                         final isJoined = g['isJoined'] == true;
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            children: [
-                              ListTile(
-                                title: Text(g['title'] ?? 'Игра'),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('📅 ${g['date']} ${g['start_time']}'),
-                                    Text('📍 ${g['location']}'),
-                                    if (g['address'] != null) Text('🏠 ${g['address']}'),
-                                    Text('💰 Стоимость: ${g['cost'] ?? 'Бесплатно'}'),
-                                    if (g['target_gender'] != null) Text('👫 Пол: ${g['target_gender']}'),
-                                    if (g['target_age'] != null) Text('🎂 Возраст: ${g['target_age']}'),
-                                    Text('👨‍⚖️ Судья: ${g['referee'] ?? 'нет'}'),
-                                  ],
-                                ),
-                                trailing: isJoined
-                                    ? OutlinedButton(onPressed: () => _toggleJoin(g), style: OutlinedButton.styleFrom(foregroundColor: Colors.red), child: const Text('Отказаться'))
-                                    : ElevatedButton(onPressed: () => _toggleJoin(g), child: const Text('Записаться')),
-                              ),
-                              if (isOwner)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
+                          child: InkWell(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => GameDetailsScreen(game: g)),
+                            ),
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  title: Text(g['title'] ?? 'Игра'),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      TextButton.icon(
-                                        onPressed: () => _showInviteDialog(g),
-                                        icon: const Icon(Icons.person_add),
-                                        label: const Text('Пригласить'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      TextButton.icon(
-                                        onPressed: () => _showParticipantsList(g),
-                                        icon: const Icon(Icons.people),
-                                        label: const Text('Кто идёт?'),
-                                      ),
+                                      Text('📅 ${g['date']} ${g['start_time']}'),
+                                      Text('📍 ${g['location']}'),
+                                      if (g['address'] != null) Text('🏠 ${g['address']}'),
+                                      Text('💰 Стоимость: ${g['cost'] ?? 'Бесплатно'}'),
+                                      if (g['target_gender'] != null) Text('👫 Пол: ${g['target_gender']}'),
+                                      if (g['target_age'] != null) Text('🎂 Возраст: ${g['target_age']}'),
+                                      Text('👨‍⚖️ Судья: ${g['referee'] ?? 'нет'}'),
                                     ],
                                   ),
+                                  trailing: isJoined
+                                      ? OutlinedButton(
+                                          onPressed: () => _toggleJoin(g),
+                                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                                          child: const Text('Отказаться'),
+                                        )
+                                      : ElevatedButton(
+                                          onPressed: () => _toggleJoin(g),
+                                          child: const Text('Записаться'),
+                                        ),
                                 ),
-                            ],
+                              ],
+                            ),
                           ),
                         );
                       },

@@ -2,6 +2,7 @@ import 'supabase_service.dart';
 
 class GameService {
   final SupabaseService _supabase = SupabaseService();
+
   static final GameService _instance = GameService._internal();
   factory GameService() => _instance;
   GameService._internal();
@@ -33,7 +34,7 @@ class GameService {
         .from('game_participants')
         .select('game_id')
         .eq('user_id', userId);
-    final gameIds = participants.map((p) => p['game_id']).toList();
+    final gameIds = participants.map((p) => p['game_id'] as String).toList();
     if (gameIds.isEmpty) return [];
     final res = await _supabase.client
         .from('games')
@@ -48,7 +49,7 @@ class GameService {
         .from('team_follows')
         .select('team_id')
         .eq('user_id', userId);
-    final teamIds = follows.map((f) => f['team_id']).toList();
+    final teamIds = follows.map((f) => f['team_id'] as String).toList();
     if (teamIds.isEmpty) return [];
     final res = await _supabase.client
         .from('games')
@@ -62,15 +63,17 @@ class GameService {
     await _supabase.client.from('games').update(updatedGame).eq('id', updatedGame['id']);
   }
 
-  Future<int> createGame(Map<String, dynamic> newGame) async {
+  // createGame возвращает String (UUID)
+  Future<String> createGame(Map<String, dynamic> newGame) async {
     final res = await _supabase.client.from('games').insert(newGame).select('id');
     if (res.isNotEmpty) {
-      return res.first['id'] as int;
+      return res.first['id'] as String;
     }
     throw Exception('Не удалось создать игру');
   }
 
-  Future<void> joinGame(int gameId) async {
+  // joinGame принимает String
+  Future<void> joinGame(String gameId) async {
     final userId = _supabase.client.auth.currentUser?.id;
     if (userId != null) {
       final existing = await _supabase.client
@@ -88,7 +91,8 @@ class GameService {
     }
   }
 
-  Future<void> leaveGame(int gameId) async {
+  // leaveGame принимает String
+  Future<void> leaveGame(String gameId) async {
     final userId = _supabase.client.auth.currentUser?.id;
     if (userId != null) {
       await _supabase.client

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/game_service.dart';
-import '../../services/invitation_service.dart';
 import '../../services/notification_service.dart';
 
 class AmateurCreateGameScreen extends StatefulWidget {
@@ -26,11 +25,10 @@ class _AmateurCreateGameScreenState extends State<AmateurCreateGameScreen> {
   String? _targetGender;
   String? _targetAge;
   String? _level;
-  int? _createdGameId;
+  bool _isLoading = false;
 
   final GameService _gameService = GameService();
   final NotificationService _notificationService = NotificationService();
-  final InvitationService _invitationService = InvitationService();
 
   @override
   Widget build(BuildContext context) {
@@ -77,15 +75,9 @@ class _AmateurCreateGameScreenState extends State<AmateurCreateGameScreen> {
               TextFormField(controller: _refereeController, decoration: const InputDecoration(labelText: 'Судья (ФИО) (если есть)')),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _createGame,
+                onPressed: _isLoading ? null : _createGame,
                 style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-                child: const Text('Создать игру'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _createdGameId != null ? () => _showInviteDialog() : null,
-                style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-                child: const Text('Пригласить игрока (после создания)'),
+                child: _isLoading ? const CircularProgressIndicator() : const Text('Создать игру'),
               ),
             ],
           ),
@@ -118,85 +110,39 @@ class _AmateurCreateGameScreenState extends State<AmateurCreateGameScreen> {
 
   Future<void> _createGame() async {
     if (_formKey.currentState!.validate()) {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      final newGame = {
-        'title': _titleController.text,
-        'date': _dateController.text,
-        'start_time': _timeController.text,
-        'location': _locationController.text,
-        'address': _addressController.text,
-        'surface': _surfaceType,
-        'max_players': int.tryParse(_maxPlayersController.text),
-        'cost': _costController.text,
-        'target_gender': _targetGender,
-        'target_age': _targetAge,
-        'level': _level,
-        'referee': _refereeController.text,
-        'created_by_type': 'amateur',
-        'created_by': auth.currentUser?.id,
-      };
-      final gameId = await _gameService.createGame(newGame);
-      _createdGameId = gameId;
-      await _notificationService.notifyNewGame(newGame);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Игра создана. Теперь можете пригласить игроков.')));
+      setState(() => _isLoading = true);
+      try {
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        final newGame = {
+          'title': _titleController.text,
+          'date': _dateController.text,
+          'start_time': _timeController.text,
+          'location': _locationController.text,
+          'address': _addressController.text,
+          'surface': _surfaceType,
+          'max_players': int.tryParse(_maxPlayersController.text),
+          'cost': _costController.text,
+          'target_gender': _targetGender,
+          'target_age': _targetAge,
+          'level': _level,
+          'referee': _refereeController.text,
+          'created_by_type': 'amateur',
+          'created_by': auth.currentUser?.id,
+        };
+        final gameId = await _gameService.createGame(newGame);
+        await _gameService.joinGame(gameId);
+        await _notificationService.notifyNewGame(newGame);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Игра создана! Вы записаны на неё.')));
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
-  }
-
-  Future<void> _showInviteDialog() async {
-    if (_createdGameId == null) return;
-    final emailController = TextEditingController();
-    Map<String, dynamic>? foundUser;
-    final scaffoldContext = context;
-    await showDialog(
-      context: scaffoldContext,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('Пригласить игрока'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(labelText: 'Email приглашаемого'),
-                onChanged: (value) async {
-                  if (value.length > 3) {
-                    final user = await _invitationService.findUserByEmail(value);
-                    if (user != null) {
-                      setStateDialog(() => foundUser = user);
-                    }
-                  }
-                },
-              ),
-              if (foundUser != null)
-                ListTile(
-                  title: Text(foundUser!['full_name']),
-                  subtitle: Text(foundUser!['email']),
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
-            ElevatedButton(
-              onPressed: () async {
-                if (foundUser != null) {
-                  await _invitationService.inviteToGame(
-                    gameId: _createdGameId!,
-                    inviterId: Provider.of<AuthProvider>(context, listen: false).currentUser!.id,
-                    inviteeId: foundUser!['id'],
-                  );
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  if (scaffoldContext.mounted) {
-                    ScaffoldMessenger.of(scaffoldContext).showSnackBar(const SnackBar(content: Text('Приглашение отправлено')));
-                  }
-                }
-              },
-              child: const Text('Пригласить'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

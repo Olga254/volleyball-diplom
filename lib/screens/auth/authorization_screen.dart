@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/supabase_service.dart';
 import '../../utils/auth_storage.dart';
 
 class AuthorizationScreen extends StatefulWidget {
@@ -18,8 +17,6 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
-
-  final SupabaseService _supabase = SupabaseService();
 
   @override
   void initState() {
@@ -47,41 +44,17 @@ class _AuthorizationScreenState extends State<AuthorizationScreen> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    final email = _emailController.text.trim().toLowerCase();
-
     try {
-      // Используем RPC-функцию для поиска
-      final profile = await _supabase.client
-          .rpc('find_user_by_email', params: {'p_email': email})
-          .maybeSingle();
-
-      if (!mounted) return;
-
-      if (profile != null) {
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        authProvider.signInAsMock(
-          profile['role'],
-          profile['full_name'],
-          profile['email'],
-          profile['position'] ?? '',
-          profile['experience'] ?? '',
-        );
-        await AuthStorage.saveCredentials(profile['email'], _passwordController.text);
-        if (mounted) {
-          context.go('/home');
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пользователь с таким email не найден. Зарегистрируйтесь.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      await auth.signIn(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (mounted) context.go('/home');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red),
         );
       }
     } finally {
